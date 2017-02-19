@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import time, sqlite3
 from datetime import datetime
-from pprint import pprint
 
 
 class DBHandler:
@@ -14,7 +13,7 @@ class DBHandler:
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        result = {"task_name" : "log"}
+        result = {"task_name": "log"}
         # Update User
         user_info = cursor.execute("SELECT * FROM users WHERE id=?", (message.from_user.id,)).fetchone()
         query_user = (message.from_user.first_name,
@@ -87,7 +86,7 @@ class DBHandler:
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
         if message.left_chat_member:
             cursor.execute("DELETE FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.left_chat_member.id))
-            needs_goodbye = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,))
+            needs_goodbye = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_goodbye:
                 result["goodbye_msg"] = needs_goodbye["goodbye_msg"]
         if message.new_chat_member:
@@ -97,11 +96,9 @@ class DBHandler:
                 query_user_new = (message.new_chat_member.id,
                                   message.new_chat_member.first_name,
                                   message.new_chat_member.last_name,
-                                  message.new_chat_member.username,
-                                  0,
-                                  None)
+                                  message.new_chat_member.username,)
                 cursor.execute("INSERT INTO users(id,first_name,last_name,username) VALUES(?,?,?,?)", query_user_new)
-            needs_welcome = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,))
+            needs_welcome = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_welcome:
                 result["welcome_msg"] = needs_welcome["welcome_msg"]
         query_user_chat = (message.from_user.id,
@@ -114,7 +111,7 @@ class DBHandler:
 
     def update_admins(self, admins, chat):
         start_time = time.time()
-        result = {"task_name" : "admin_update"}
+        result = {"task_name": "admin_update"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -149,9 +146,10 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
+
     def log_get(self, chat_id, datetime_from, datetime_to=datetime.utcnow()):
         start_time = time.time()
-        result = {"task_name" : "log_get"}
+        result = {"task_name": "log_get"}
         query_result = {}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
@@ -165,4 +163,15 @@ class DBHandler:
             print(msg)
         result["query_result"] = query_result
         result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def set_started(self, user_id):
+        start_time = time.time()
+        result = {"task_name": "set_started"}
+        query_result = {}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        cursor.execute("UPDATE users SET started=1 WHERE id=?", (user_id,))
+        handle.commit()
         return(result)
