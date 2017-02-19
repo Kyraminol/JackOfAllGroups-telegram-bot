@@ -33,6 +33,11 @@ def msg_parse(bot, update):
     chat_id = message.chat.id
     logged = db.log(message)
     admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+    notify = db.notify(message)
+    if notify["tag_to_notify"]:
+        for chat_id in notify["tag_to_notify"]:
+            text = "%s ti ha nominato in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["tag_text"])
+            bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN)
 
 
 def error(bot, update, error):
