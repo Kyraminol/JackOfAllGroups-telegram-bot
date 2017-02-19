@@ -3,7 +3,7 @@
 
 import logging, pytz, urllib3
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
-from datetime import datetime
+from telegram import ParseMode
 from db import DBHandler
 urllib3.disable_warnings()
 
@@ -16,6 +16,15 @@ logger = logging.getLogger(__name__)
 db = DBHandler("logger.sqlite")
 
 
+def start(bot, update):
+    chat = update.message.chat
+    if chat.type == "private":
+        text = "*Oneplus Community Custom Care* ti dà il benvenuto!\n" \
+               "Sei registrato per le notifiche!"
+        db.set_started(update.message.from_user.id)
+        bot.sendMessage(chat.id, text, parse_mode=ParseMode.MARKDOWN)
+
+
 def msg_parse(bot, update):
     if update.message:
         message = update.message
@@ -23,10 +32,7 @@ def msg_parse(bot, update):
         message = update.edited_message
     chat_id = message.chat.id
     logged = db.log(message)
-    print(logged)
     admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
-    print(admins)
-    print(update.message.date)
 
 
 def error(bot, update, error):
@@ -36,6 +42,7 @@ def error(bot, update, error):
 def main():
     updater = Updater("INSERT TOKEN HERE")
     dp = updater.dispatcher
+    dp.add_handler(CommandHandler("start", start))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
