@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import time, sqlite3
+import time, sqlite3, re
 from datetime import datetime
 
 
@@ -146,7 +146,6 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-
     def log_get(self, chat_id, datetime_from, datetime_to=datetime.utcnow()):
         start_time = time.time()
         result = {"task_name": "log_get"}
@@ -168,10 +167,46 @@ class DBHandler:
     def set_started(self, user_id):
         start_time = time.time()
         result = {"task_name": "set_started"}
-        query_result = {}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
         cursor.execute("UPDATE users SET started=1 WHERE id=?", (user_id,))
         handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def notify(self, message):
+        start_time = time.time()
+        result = {"task_name": "notify"}
+        tag_to_notify = ()
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        chat_id = message.chat.id
+        if message.from_user.username:
+            from_user = "@%s" % message.from_user.username
+        else:
+            from_user = message.from_user.first_name
+        regex_tag = r"@\w+"
+        if message.text:
+            text = message.text
+        elif message.caption:
+            text = message.caption
+        else:
+            text = None
+        if text:
+            result["tag_text"] = text
+            tags = re.finditer(regex_tag, text, re.MULTILINE)
+            for tag in tags:
+                username = tag.group()
+                user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
+                user_id = user_info["id"]
+                user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
+                if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
+                    tag_to_notify += (user_id,)
+        result["exec_time"] = time.time() - start_time
+        result["tag_to_notify"] = tag_to_notify
+        result["chat_title"] = message.chat.title
+        result["from_user"] = from_user
+        print(result)
         return(result)
