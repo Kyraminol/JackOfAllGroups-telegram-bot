@@ -185,6 +185,7 @@ class DBHandler:
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
         chat_id = message.chat.id
+        from_id = message.from_user.id
         if message.from_user.username:
             from_user = "@%s" % message.from_user.username
         else:
@@ -204,19 +205,20 @@ class DBHandler:
                 if username == "@admin":
                     admin_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator')", (chat_id,)).fetchall()
                     for admin in admin_chat_info:
-                        admin_to_notify += (admin["user_id"],)
+                        if not admin["user_id"] == from_id:
+                            admin_to_notify += (admin["user_id"],)
                 else:
                     user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
                     if user_info:
                         user_id = user_info["id"]
                         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-                        if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
+                        if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info and not user_id == from_id:
                             tag_to_notify += (user_id,)
         if message.reply_to_message:
             user_id = message.reply_to_message.from_user.id
             user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
             user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-            if user_info["started"] == 1 and user_chat_info:
+            if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
                 if tag_to_notify:
                     if user_id not in tag_to_notify:
                         reply_to_notify = user_id
