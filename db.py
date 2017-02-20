@@ -172,7 +172,7 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def set_started(self, user_id):
+    def started_set(self, user_id):
         start_time = time.time()
         result = {"task_name": "set_started"}
         handle = sqlite3.connect(self._dbpath)
