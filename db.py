@@ -86,7 +86,7 @@ class DBHandler:
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
         if message.left_chat_member:
             cursor.execute("DELETE FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.left_chat_member.id))
-            needs_goodbye = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
+            needs_goodbye = cursor.execute("SELECT goodbye_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_goodbye:
                 result["goodbye_msg"] = needs_goodbye["goodbye_msg"]
         if message.new_chat_member:
@@ -270,3 +270,33 @@ class DBHandler:
         result["hashtags"] = tuple(hashtags_db)
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def chat_msgs(self, chat_id, welcome_msg=None, goodbye_msg=None):
+        start_time = time.time()
+        result = {"task_name": "hashtag_set"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        if not welcome_msg == None or not goodbye_msg == None:
+            if not welcome_msg == None:
+                if welcome_msg == "":
+                    query_welcome = (None,
+                                     chat_id)
+                else:
+                    query_welcome = (welcome_msg,
+                                     chat_id)
+                cursor.execute("UPDATE chats SET welcome_msg=? WHERE id=?", query_welcome)
+            if not goodbye_msg == None:
+                if goodbye_msg == "":
+                    query_goodbye = (None,
+                                     chat_id)
+                else:
+                    query_goodbye = (goodbye_msg,
+                                     chat_id)
+                cursor.execute("UPDATE chats SET goodbye_msg=? WHERE id=?", query_goodbye)
+            handle.commit()
+        msgs = cursor.execute("SELECT * FROM chats WHERE id=?", (chat_id,)).fetchone()
+        result["goodbye"] = msgs["goodbye_msg"]
+        result["welcome"] = msgs["welcome_msg"]
+        result["exec_time"] = time.time() - start_time
+        return (result)
