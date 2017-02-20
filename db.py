@@ -180,6 +180,7 @@ class DBHandler:
         result = {"task_name": "notify"}
         tag_to_notify = ()
         reply_to_notify = None
+        admin_to_notify = ()
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -200,12 +201,17 @@ class DBHandler:
             tags = re.finditer(regex_tag, text, re.MULTILINE)
             for tag in tags:
                 username = tag.group()
-                user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
-                if user_info:
-                    user_id = user_info["id"]
-                    user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-                    if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
-                        tag_to_notify += (user_id,)
+                if username == "@admin":
+                    admin_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator')", (chat_id,)).fetchall()
+                    for admin in admin_chat_info:
+                        admin_to_notify += (admin["user_id"],)
+                else:
+                    user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
+                    if user_info:
+                        user_id = user_info["id"]
+                        user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
+                        if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
+                            tag_to_notify += (user_id,)
         if message.reply_to_message:
             user_id = message.reply_to_message.from_user.id
             user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
@@ -216,6 +222,7 @@ class DBHandler:
                         reply_to_notify = user_id
                 else:
                     reply_to_notify = user_id
+        result["admin_to_notify"] = admin_to_notify
         result["reply_to_notify"] = reply_to_notify
         result["exec_time"] = time.time() - start_time
         result["tag_to_notify"] = tag_to_notify

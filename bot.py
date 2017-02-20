@@ -45,6 +45,10 @@ def msg_parse(bot, update):
     if notify["reply_to_notify"]:
         text = "%s ti ha risposto in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
         bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    if notify["admin_to_notify"]:
+        for admin_id in notify["admin_to_notify"]:
+            text = "%s ha chiamato un amministratore in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
+            bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 
 def error(bot, update, error):
