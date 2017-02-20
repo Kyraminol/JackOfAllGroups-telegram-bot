@@ -242,3 +242,31 @@ class DBHandler:
             result["chat_username"] = message.chat.username
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def hashtags(self, chat_id, user_id, hashtags=(), remove=False):
+        start_time = time.time()
+        result = {"task_name": "hashtag_set"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        hashtags_db = []
+        hashtags_query = cursor.execute("SELECT * FROM users_hashtags WHERE chat_id=? AND user_id=?", (chat_id, user_id)).fetchall()
+        for hashtag in hashtags_query:
+            hashtags_db += [hashtag["hashtag"],]
+        if hashtags:
+            for hashtag in hashtags:
+                query_hashtag = (chat_id,
+                                 user_id,
+                                 hashtag)
+                if not remove:
+                    if hashtag not in hashtags_db:
+                        cursor.execute("INSERT INTO users_hashtags(chat_id, user_id, hashtag) VALUES(?,?,?)", query_hashtag)
+                        hashtags_db += [hashtag]
+                else:
+                    if hashtag in hashtags_db:
+                        cursor.execute("DELETE FROM users_hashtags WHERE chat_id=? AND user_id=? AND hashtag=?", query_hashtag)
+                        hashtags_db.remove(hashtag)
+            handle.commit()
+        result["hashtags"] = tuple(hashtags_db)
+        result["exec_time"] = time.time() - start_time
+        return(result)
