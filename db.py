@@ -115,9 +115,15 @@ class DBHandler:
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        admins_list = ()
+        admins_id = ()
+        admins_full = ()
         for admin in admins:
-            admins_list += (admin.user.id,)
+            admins_id += (admin.user.id,)
+            admins_full += ({"first_name": admin.user.first_name,
+                             "last_name" : admin.user.last_name,
+                             "username"  : admin.user.username,
+                             "id"        : admin.user.id,
+                             "status"    : admin.status},)
             # User
             user_info = cursor.execute("SELECT * FROM users WHERE id=?", (admin.user.id,)).fetchone()
             query_user = (admin.user.first_name,
@@ -140,9 +146,11 @@ class DBHandler:
         # Remove old admins
         old_admins = cursor.execute("SELECT user_id FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator')", (chat,)).fetchall()
         for admin in old_admins:
-            if admin["user_id"] not in admins_list:
+            if admin["user_id"] not in admins_id:
                 cursor.execute("UPDATE users_chats SET status='member' WHERE user_id=? AND chat_id=?", (admin["user_id"], chat,))
         handle.commit()
+        result["admins_id"] = admins_id
+        result["admin_full"] = admins_full
         result["exec_time"] = time.time() - start_time
         return(result)
 
@@ -226,11 +234,11 @@ class DBHandler:
                     reply_to_notify = user_id
         result["admin_to_notify"] = admin_to_notify
         result["reply_to_notify"] = reply_to_notify
-        result["exec_time"] = time.time() - start_time
         result["tag_to_notify"] = tag_to_notify
         result["chat_title"] = message.chat.title
         result["from_user"] = from_user
         result["msg_id"] = message.message_id
         if message.chat.username:
             result["chat_username"] = message.chat.username
+        result["exec_time"] = time.time() - start_time
         return(result)
