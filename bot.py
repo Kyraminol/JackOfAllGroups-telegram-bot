@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging, pytz, urllib3
+import logging, re, urllib3
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from telegram import ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from db import DBHandler
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 db = DBHandler("logger.sqlite")
 
 
-def start(bot, update):
+def cmd_start(bot, update):
     chat = update.message.chat
     if chat.type == "private":
         text = "*Oneplus Community Custom Care* ti dà il benvenuto!\n" \
@@ -51,6 +51,23 @@ def msg_parse(bot, update):
             bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 
+def cmd_markdown(bot, update):
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message  # To-Do: Edit message if edited, not resending i
+    cmd_regex = r"^/\w+"
+    cmd_text = re.search(cmd_regex, message.text)
+    if cmd_text:
+        text = message.text[cmd_text.end():].strip()
+        if text:
+            chat_id = message.chat.id
+            admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+            if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
+                text = "Solo gli amministratori possono usare questa funzione."
+            bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN)
+
+
 def error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"' % (update, error))
 
@@ -58,7 +75,9 @@ def error(bot, update, error):
 def main():
     updater = Updater("INSERT TOKEN HERE")
     dp = updater.dispatcher
-    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("start", cmd_start))
+    dp.add_handler(CommandHandler("md", cmd_markdown))
+    dp.add_handler(CommandHandler("markdown", cmd_markdown))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
