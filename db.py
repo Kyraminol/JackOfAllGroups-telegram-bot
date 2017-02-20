@@ -179,6 +179,7 @@ class DBHandler:
         start_time = time.time()
         result = {"task_name": "notify"}
         tag_to_notify = ()
+        reply_to_notify = None
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -195,18 +196,32 @@ class DBHandler:
         else:
             text = None
         if text:
-            result["tag_text"] = text
+            result["msg_text"] = text
             tags = re.finditer(regex_tag, text, re.MULTILINE)
             for tag in tags:
                 username = tag.group()
                 user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
-                user_id = user_info["id"]
-                user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-                if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
-                    tag_to_notify += (user_id,)
+                if user_info:
+                    user_id = user_info["id"]
+                    user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
+                    if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info:
+                        tag_to_notify += (user_id,)
+        if message.reply_to_message:
+            user_id = message.reply_to_message.from_user.id
+            user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+            user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
+            if user_info["started"] == 1 and user_chat_info:
+                if tag_to_notify:
+                    if user_id not in tag_to_notify:
+                        reply_to_notify = user_id
+                else:
+                    reply_to_notify = user_id
+        result["reply_to_notify"] = reply_to_notify
         result["exec_time"] = time.time() - start_time
         result["tag_to_notify"] = tag_to_notify
         result["chat_title"] = message.chat.title
         result["from_user"] = from_user
-        print(result)
+        result["msg_id"] = message.message_id
+        if message.chat.username:
+            result["chat_username"] = message.chat.username
         return(result)
