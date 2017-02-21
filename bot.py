@@ -35,23 +35,28 @@ def msg_parse(bot, update):
     if message:
         chat_id = message.chat.id
         logged = db.log(message)
-        admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
-        notify = db.notify(message)
-        keyboard = [[InlineKeyboardButton("Vai al messaggio", callback_data="goto.%s" % (notify["msg_id"]))]]
-        if notify["chat_username"]:
-            keyboard = [[InlineKeyboardButton("Vai al messaggio", url="https://t.me/%s/%s" % (notify["chat_username"], notify["msg_id"]))]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        if notify["tag_to_notify"]:
-            for chat_id in notify["tag_to_notify"]:
-                text = "%s ti ha nominato in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-        if notify["reply_to_notify"]:
-            text = "%s ti ha risposto in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-            bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
-        if notify["admin_to_notify"]:
-            for admin_id in notify["admin_to_notify"]:
-                text = "%s ha chiamato un amministratore in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+        if not message.chat.type == "private":
+            admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+            fwd_from = None
+            if message.forward_from:
+                fwd_from = message.forward_from.id
+            if not fwd_from == bot.id:
+                notify = db.notify(message)
+                keyboard = [[InlineKeyboardButton("Vai al messaggio", callback_data="goto.%s" % (notify["msg_id"]))]]
+                if notify["chat_username"]:
+                    keyboard = [[InlineKeyboardButton("Vai al messaggio", url="https://t.me/%s/%s" % (notify["chat_username"], notify["msg_id"]))]]
+                reply_markup = InlineKeyboardMarkup(keyboard)
+                if notify["tag_to_notify"]:
+                    for chat_id in notify["tag_to_notify"]:
+                        text = "%s ti ha nominato in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
+                        bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+                if notify["reply_to_notify"]:
+                    text = "%s ti ha risposto in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
+                    bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+                if notify["admin_to_notify"]:
+                    for admin_id in notify["admin_to_notify"]:
+                        text = "%s ha chiamato un amministratore in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
+                        bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 
 def cmd_markdown(bot, update):
