@@ -34,33 +34,15 @@ class DBHandler:
         else:
             cursor.execute("INSERT INTO chats(title,type,id) VALUES(?,?,?)", query_chat)
         # Insert Log
-        media_id = None
-        media_type = None
         fwd_from_chat = None
         fwd_from_user = None
         replyto_id = None
         pinned_id = None
-        if message.audio:
-            media_id = message.audio.file_id
-            media_type = "audio"
-        elif message.document:
-            media_id = message.document.file_id
-            media_type = "document"
-        elif message.photo:
-            media_id = message.photo[-1].file_id
-            media_type = "photo"
-        elif message.sticker:
-            media_id = message.sticker.file_id
-            media_type = "sticker"
-        elif message.video:
-            media_id = message.video.file_id
-            media_type = "video"
-        elif message.voice:
-            media_id = message.voice.file_id
-            media_type = "voice"
-        text = message.text
-        if media_id:
-            text = message.caption
+        get_media = self._get_media(message)
+        text = get_media["text"]
+        media_id = get_media["media_id"]
+        media_type = get_media["media_type"]
+        doc_type = get_media["doc_type"]
         if message.forward_from:
             fwd_from_user = message.forward_from.id
         if message.forward_from_chat:
@@ -74,6 +56,7 @@ class DBHandler:
                      message.message_id,
                      media_id,
                      media_type,
+                     doc_type,
                      text,
                      fwd_from_chat,
                      fwd_from_user,
@@ -81,7 +64,7 @@ class DBHandler:
                      replyto_id,
                      pinned_id,)
         if text or media_type:
-            cursor.execute("INSERT INTO logs(from_id,chat_id,msg_id,media_id,media_type,text,fwd_from_chat,fwd_from_user,date,replyto_id,pinned_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)", query_log)
+            cursor.execute("INSERT INTO logs(from_id,chat_id,msg_id,media_id,media_type,doc_type,text,fwd_from_chat,fwd_from_user,date,replyto_id,pinned_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", query_log)
         # User List
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
         if message.left_chat_member:
@@ -199,14 +182,12 @@ class DBHandler:
         else:
             from_user = message.from_user.first_name
         regex_tag = r"@\w+"
-        if message.text:
-            text = message.text
-        elif message.caption:
-            text = message.caption
-        else:
-            text = None
+        get_media = self._get_media(message)
+        text = get_media["text"]
+        media_id = get_media["media_id"]
+        media_type = get_media["media_type"]
+        doc_type = get_media["doc_type"]
         if text:
-            result["msg_text"] = text
             tags = re.finditer(regex_tag, text, re.MULTILINE)
             for tag in tags:
                 username = tag.group()
@@ -227,11 +208,14 @@ class DBHandler:
             user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
             user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
             if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
+                reply_to_notify = user_id
                 if tag_to_notify:
-                    if user_id not in tag_to_notify:
-                        reply_to_notify = user_id
-                else:
-                    reply_to_notify = user_id
+                    if user_id in tag_to_notify:
+                        reply_to_notify = None
+        if reply_to_notify and not text and media_type:
+            result["media_type"] = media_type
+            result["media_id"] = media_id
+        result["msg_text"] = text
         result["admin_to_notify"] = admin_to_notify
         result["reply_to_notify"] = reply_to_notify
         result["tag_to_notify"] = tag_to_notify
@@ -300,3 +284,37 @@ class DBHandler:
         result["welcome"] = msgs["welcome_msg"]
         result["exec_time"] = time.time() - start_time
         return (result)
+
+    def _get_media(self, message):
+        media_id = None
+        media_type = None
+        doc_type = None
+        text = None
+        if message.audio:
+            media_id = message.audio.file_id
+            media_type = "audio"
+        elif message.document:
+            media_id = message.document.file_id
+            media_type = "document"
+            doc_type = message.document.mime_type
+        elif message.photo:
+            media_id = message.photo[-1].file_id
+            media_type = "photo"
+        elif message.sticker:
+            media_id = message.sticker.file_id
+            media_type = "sticker"
+        elif message.video:
+            media_id = message.video.file_id
+            media_type = "video"
+        elif message.voice:
+            media_id = message.voice.file_id
+            media_type = "voice"
+        if message.text:
+            text = message.text
+        if media_id:
+            text = message.caption
+        result = {"media_id"   : media_id,
+                  "media_type" : media_type,
+                  "doc_type"   : doc_type,
+                  "text"       : text}
+        return(result)
