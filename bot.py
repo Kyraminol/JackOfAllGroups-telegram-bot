@@ -87,32 +87,41 @@ def cmd_markdown_pin(bot, update):
         message = None
     if message:
         logged = db.log(message)
+        chat_id = message.chat.id
+        chat_type = message.chat.type
         cmd_regex = r"^/\w+"
         cmd_text = re.search(cmd_regex, message.text)
         if cmd_text:
             text = message.text[cmd_text.end():].strip()
             if text:
-                chat_id = message.chat.id
-                admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
                 not_admin = False
-                if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
-                    not_admin = True
+                if not chat_type == "private":
+                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
+                        not_admin = True
                 if not cmd_text.group() == "/pin":
                     if not_admin:
                         text = "Solo gli amministratori possono usare questa funzione."
                     db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
                 else:
-                    if not_admin:
-                        text = "Solo gli amministratori possono usare questa funzione."
-                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                    if not chat_type == "private":
+                        if not_admin:
+                            text = "Solo gli amministratori possono usare questa funzione."
+                            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                        else:
+                            pinned = db.get_pinned_msg(chat_id)
+                            if pinned["msg_id"]:
+                                if pinned["from_id"] == bot.id:
+                                    db.log(bot.editMessageText(text=text, message_id=pinned["msg_id"], chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
+                                else:
+                                    text = "Posso modificare il messaggio fissato solo è stato inviato da me, per favore fissa un mio messaggio."
+                                    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
                     else:
-                        pinned = db.get_pinned_msg(chat_id)
-                        if pinned["msg_id"]:
-                            if pinned["from_id"] == bot.id:
-                                db.log(bot.editMessageText(text=text, message_id=pinned["msg_id"], chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
-                            else:
-                                text = "Posso modificare il messaggio fissato solo è stato inviato da me, per favore fissa un mio messaggio."
-                                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                        text = "Non puoi usare questa funzione in una conversazione privata."
+                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+            else:
+                text = "È necessario un testo dopo il comando."
+                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 
