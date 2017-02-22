@@ -78,7 +78,7 @@ def msg_parse(bot, update):
                         db.log(bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
 
 
-def cmd_markdown(bot, update):
+def cmd_markdown_pin(bot, update):
     if update.message:
         message = update.message
     elif update.edited_message:
@@ -94,9 +94,26 @@ def cmd_markdown(bot, update):
             if text:
                 chat_id = message.chat.id
                 admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                not_admin = False
                 if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
-                    text = "Solo gli amministratori possono usare questa funzione."
-                bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN)
+                    not_admin = True
+                if not cmd_text.group() == "/pin":
+                    if not_admin:
+                        text = "Solo gli amministratori possono usare questa funzione."
+                    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                else:
+                    if not_admin:
+                        text = "Solo gli amministratori possono usare questa funzione."
+                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                    else:
+                        pinned = db.get_pinned_msg(chat_id)
+                        if pinned["msg_id"]:
+                            if pinned["from_id"] == bot.id:
+                                db.log(bot.editMessageText(text=text, message_id=pinned["msg_id"], chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
+                            else:
+                                text = "Posso modificare il messaggio fissato solo è stato inviato da me, per favore fissa un mio messaggio."
+                                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+
 
 
 def error(bot, update, error):
@@ -107,8 +124,9 @@ def main():
     updater = Updater("INSERT TOKEN HERE")
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", cmd_start))
-    dp.add_handler(CommandHandler("md", cmd_markdown))
-    dp.add_handler(CommandHandler("markdown", cmd_markdown))
+    dp.add_handler(CommandHandler("md", cmd_markdown_pin))
+    dp.add_handler(CommandHandler("markdown", cmd_markdown_pin))
+    dp.add_handler(CommandHandler("pin", cmd_markdown_pin))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
