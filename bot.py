@@ -25,6 +25,7 @@ media_texts = {"voice"    : " messaggio vocale",
 
 
 def cmd_start(bot, update):
+    logged = db.log(update.message)
     chat = update.message.chat
     if chat.type == "private":
         text = "*Oneplus Community Custom Care* ti dà il benvenuto!\n" \
@@ -85,6 +86,7 @@ def cmd_markdown(bot, update):
     else:
         message = None
     if message:
+        logged = db.log(message)
         cmd_regex = r"^/\w+"
         cmd_text = re.search(cmd_regex, message.text)
         if cmd_text:
