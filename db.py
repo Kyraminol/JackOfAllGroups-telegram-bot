@@ -318,3 +318,27 @@ class DBHandler:
                   "doc_type"   : doc_type,
                   "text"       : text}
         return(result)
+
+    def get_pinned_msg(self, chat_id):
+        start_time = time.time()
+        result = {"task_name": "hashtag_set"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        from_id = None
+        msg_id = None
+        text = None
+        pinned_db = cursor.execute("SELECT pinned_id FROM logs WHERE chat_id=? AND pinned_id NOT NULL ORDER BY msg_id DESC", (chat_id,)).fetchone()
+        if pinned_db:
+            pinned_msg_db = cursor.execute("SELECT * FROM logs WHERE chat_id=? AND msg_id=?", (chat_id, pinned_db["pinned_id"])).fetchone()
+            print(pinned_db)
+            print(pinned_msg_db)
+            if pinned_msg_db:
+                from_id = pinned_msg_db["from_id"]
+                msg_id = pinned_msg_db["msg_id"]
+                text = pinned_msg_db["text"]
+        result["from_id"] = from_id
+        result["msg_id"] = msg_id
+        result["text"] = text
+        result["exec_time"] = time.time() - start_time
+        return(result)
