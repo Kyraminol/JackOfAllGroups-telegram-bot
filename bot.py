@@ -31,7 +31,7 @@ def cmd_start(bot, update):
         text = "*Oneplus Community Custom Care* ti dà il benvenuto!\n" \
                "Sei registrato per le notifiche!"
         db.started_set(update.message.from_user.id)
-        bot.sendMessage(chat.id, text, parse_mode=ParseMode.MARKDOWN)
+        db.log(bot.sendMessage(chat.id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def msg_parse(bot, update):
@@ -58,7 +58,7 @@ def msg_parse(bot, update):
                 if notify["tag_to_notify"]:
                     for chat_id in notify["tag_to_notify"]:
                         text = "%s ti ha nominato in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                        bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
                 if notify["reply_to_notify"]:
                     text = "%s ti ha risposto in *%s*" % (notify["from_user"], notify["chat_title"])
                     if notify["msg_text"]:
@@ -71,11 +71,11 @@ def msg_parse(bot, update):
                         text += " con un%s" % media_text
                         keyboard_media = keyboard + [[InlineKeyboardButton("Visualizza qui media", callback_data="showmedia.%s" % notify["media_id"])]]
                         reply_markup_reply = InlineKeyboardMarkup(keyboard_media)
-                    bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup_reply)
+                    db.log(bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup_reply))
                 if notify["admin_to_notify"]:
                     for admin_id in notify["admin_to_notify"]:
                         text = "%s ha chiamato un amministratore in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                        bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+                        db.log(bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
 
 
 def cmd_markdown(bot, update):

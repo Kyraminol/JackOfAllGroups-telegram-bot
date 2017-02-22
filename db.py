@@ -63,7 +63,7 @@ class DBHandler:
                      (message.date - datetime(1970, 1, 1)).total_seconds(),
                      replyto_id,
                      pinned_id,)
-        if text or media_type:
+        if text or media_type or pinned_id:
             cursor.execute("INSERT INTO logs(from_id,chat_id,msg_id,media_id,media_type,doc_type,text,fwd_from_chat,fwd_from_user,date,replyto_id,pinned_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", query_log)
         # User List
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
@@ -257,7 +257,7 @@ class DBHandler:
 
     def chat_msgs(self, chat_id, welcome_msg=None, goodbye_msg=None):
         start_time = time.time()
-        result = {"task_name": "hashtag_set"}
+        result = {"task_name": "chat_msgs"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
