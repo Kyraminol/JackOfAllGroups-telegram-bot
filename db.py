@@ -409,3 +409,24 @@ class DBHandler:
         result["msg"] = result_msg
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def bound(self, bind_to_id=None):
+        start_time = time.time()
+        result = {"task_name": "bound",
+                  "bound_ids": ()}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        if bind_to_id:
+            bind_db = cursor.execute("SELECT id FROM users WHERE bound NOT NULL").fetchone()
+            if bind_db:
+                bind_lvl = 1
+            else:
+                bind_lvl = 2
+            cursor.execute("UPDATE users SET bound=? WHERE id=?", (bind_lvl, bind_to_id,))
+            handle.commit()
+        bind_db = cursor.execute("SELECT id FROM users WHERE bound NOT NULL").fetchall()
+        for bind in bind_db:
+            result["bound_ids"] += (bind["id"],)
+        result["exec_time"] = time.time() - start_time
+        return(result)
