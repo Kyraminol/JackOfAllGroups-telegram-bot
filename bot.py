@@ -44,6 +44,14 @@ def msg_parse(bot, update):
     if message:
         chat_id = message.chat.id
         logged = db.log(message)
+        if logged["welcome_msg"] or logged["goodbye_msg"]:
+            if logged["welcome_msg"]:
+                msg = logged["welcome_msg"]
+            else:
+                msg = logged["goodbye_msg"]
+            msg = re.sub(r"%username%", logged["welcome_goodbye_name"], msg)
+            msg = re.sub(r"%chat%", message.chat.title, msg)
+            db.log(bot.sendMessage(chat_id, msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
         if not message.chat.type == "private":
             admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
             fwd_from = None
@@ -78,11 +86,57 @@ def msg_parse(bot, update):
                         db.log(bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
 
 
-def cmd_markdown_pin(bot, update):
+def cmd_pin(bot, update):
     if update.message:
         message = update.message
     elif update.edited_message:
-        message = update.edited_message  # To-Do: Edit message if edited, not resending it
+        message = update.edited_message
+    else:
+        message = None
+    if message:
+        logged = db.log(message)
+        chat_id = message.chat.id
+        chat_type = message.chat.type
+        cmd_regex = r"^/\w+"
+        cmd_text = re.search(cmd_regex, message.text)
+        error = False
+        message_id = None
+        if cmd_text:
+            text = message.text[cmd_text.end():].strip()
+            if text:
+                is_admin = False
+                if not chat_type == "private":
+                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    if message.from_user.id in admins["admins_id"]:
+                        is_admin = True
+                    if is_admin:
+                        pinned = db.get_pinned_msg(chat_id)
+                        if pinned["msg_id"]:
+                            if pinned["from_id"] == bot.id:
+                                message_id = pinned["msg_id"]
+                            else:
+                                text = "Posso modificare il messaggio fissato solo è stato inviato da me, per favore fissa un mio messaggio."
+                                error = True
+                    else:
+                        text = "Solo gli amministratori possono usare questa funzione."
+                        error = True
+                else:
+                    text = "Non puoi usare questa funzione in una conversazione privata."
+                    error = True
+            else:
+                text = "È necessario un testo dopo il comando."
+                error = True
+            if not error:
+                db.log(bot.editMessageText(text=text, message_id=message_id, chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
+            else:
+                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+
+
+def cmd_markdown(bot, update):
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message
     else:
         message = None
     if message:
@@ -99,30 +153,108 @@ def cmd_markdown_pin(bot, update):
                     admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
                     if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
                         not_admin = True
-                if not cmd_text.group() == "/pin":
-                    if not_admin:
-                        text = "Solo gli amministratori possono usare questa funzione."
-                    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
-                else:
-                    if not chat_type == "private":
-                        if not_admin:
-                            text = "Solo gli amministratori possono usare questa funzione."
-                            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
-                        else:
-                            pinned = db.get_pinned_msg(chat_id)
-                            if pinned["msg_id"]:
-                                if pinned["from_id"] == bot.id:
-                                    db.log(bot.editMessageText(text=text, message_id=pinned["msg_id"], chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
-                                else:
-                                    text = "Posso modificare il messaggio fissato solo è stato inviato da me, per favore fissa un mio messaggio."
-                                    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
-                    else:
-                        text = "Non puoi usare questa funzione in una conversazione privata."
-                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                if not_admin:
+                    text = "Solo gli amministratori possono usare questa funzione."
             else:
                 text = "È necessario un testo dopo il comando."
+            if update.edited_message:
+                msg_original = db.get_msg(chat_id, msg_id=message.message_id)
+                cmd_text = re.search(cmd_regex, msg_original["msg"][0]["text"])
+                msg_original = msg_original["msg"][0]["text"][cmd_text.end():].strip()
+                msg_original_bot = db.get_msg(chat_id, text=msg_original, from_id=bot.id)
+                db.log(bot.editMessageText(text, chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+            else:
                 db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
+
+def cmd_welcome(bot, update):
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message
+    else:
+        message = None
+    if message:
+        logged = db.log(message)
+        chat_id = message.chat.id
+        chat_type = message.chat.type
+        cmd_regex = r"^/\w+"
+        cmd_text = re.search(cmd_regex, message.text)
+        if cmd_text:
+            text = message.text[cmd_text.end():].strip()
+            if text:
+                is_admin = False
+                if not chat_type == "private":
+                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    if message.from_user.id in admins["admins_id"]:
+                        is_admin = True
+                    if is_admin:
+                        db.welcome_goodbye(chat_id, welcome_msg=text)
+                        text = "Messaggio di benvenuto impostato."
+                    else:
+                        text = "Solo gli amministratori possono usare questa funzione."
+                else:
+                    text = "Non puoi usare questa funzione in una conversazione privata."
+            else:
+                text = "È necessario un testo dopo il comando."
+            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+
+
+def cmd_goodbye(bot, update):
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message
+    else:
+        message = None
+    if message:
+        logged = db.log(message)
+        chat_id = message.chat.id
+        chat_type = message.chat.type
+        cmd_regex = r"^/\w+"
+        cmd_text = re.search(cmd_regex, message.text)
+        if cmd_text:
+            text = message.text[cmd_text.end():].strip()
+            if text:
+                is_admin = False
+                if not chat_type == "private":
+                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    if message.from_user.id in admins["admins_id"]:
+                        is_admin = True
+                    if is_admin:
+                        db.welcome_goodbye(chat_id, goodbye_msg=text)
+                        text = "Messaggio di arrivederci impostato."
+                    else:
+                        text = "Solo gli amministratori possono usare questa funzione."
+                else:
+                    text = "Non puoi usare questa funzione in una conversazione privata."
+            else:
+                text = "È necessario un testo dopo il comando."
+            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+
+
+def cmd_clear_welcome(bot, update):
+    message = update.message
+    logged = db.log(message)
+    chat_id = message.chat.id
+    if not message.chat.type == "private":
+        db.welcome_goodbye(chat_id, welcome_msg="")
+        text = "Messaggio di benvenuto rimosso."
+    else:
+        text = "Non puoi usare questa funzione in una conversazione privata."
+    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+
+
+def cmd_clear_goodbye(bot, update):
+    message = update.message
+    logged = db.log(message)
+    chat_id = message.chat.id
+    if not message.chat.type == "private":
+        db.welcome_goodbye(chat_id, goodbye_msg="")
+        text = "Messaggio di arrivederci rimosso."
+    else:
+        text = "Non puoi usare questa funzione in una conversazione privata."
+    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def error(bot, update, error):
@@ -133,9 +265,13 @@ def main():
     updater = Updater("INSERT TOKEN HERE")
     dp = updater.dispatcher
     dp.add_handler(CommandHandler("start", cmd_start))
-    dp.add_handler(CommandHandler("md", cmd_markdown_pin))
-    dp.add_handler(CommandHandler("markdown", cmd_markdown_pin))
-    dp.add_handler(CommandHandler("pin", cmd_markdown_pin))
+    dp.add_handler(CommandHandler("md", cmd_markdown, allow_edited=True))
+    dp.add_handler(CommandHandler("markdown", cmd_markdown, allow_edited=True))
+    dp.add_handler(CommandHandler("pin", cmd_pin, allow_edited=True))
+    dp.add_handler(CommandHandler("welcome", cmd_welcome))
+    dp.add_handler(CommandHandler("goodbye", cmd_goodbye))
+    dp.add_handler(CommandHandler("del_welcome", cmd_clear_welcome))
+    dp.add_handler(CommandHandler("del_goodbye", cmd_clear_goodbye))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
