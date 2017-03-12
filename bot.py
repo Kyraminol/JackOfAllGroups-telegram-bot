@@ -44,6 +44,14 @@ def msg_parse(bot, update):
     if message:
         chat_id = message.chat.id
         logged = db.log(message)
+        if message.new_chat_member:
+            if message.new_chat_member.id == bot.id:
+                bound = db.bound()
+                if not message.from_user.id in bound["bound_ids"]:
+                    text = "Sono legato al mio creatore, per favore contatta lui per potermi aggiungere."
+                    db.log(bot.sendMessage(message.chat.id, text, parse_mode=ParseMode.MARKDOWN))
+                    bot.leaveChat(message.chat.id)
+                    return
         if logged["welcome_msg"] or logged["goodbye_msg"]:
             if logged["welcome_msg"]:
                 msg = logged["welcome_msg"]
@@ -257,6 +265,25 @@ def cmd_clear_goodbye(bot, update):
     db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
+def cmd_bind(bot, update):
+    message = update.message
+    logged = db.log(message)
+    bound = db.bound()
+    if not bound["bound_ids"]:
+        bound = db.bound(bind_to_id=message.from_user.id)
+        text = "Ti sei legato al bot."
+    else:
+        if message.reply_to_message:
+            user_info = db.get_user(message.from_user.id)
+            if user_info["user"]:
+                if user_info["user"]["bound"] == 2:
+                    bound = db.bound(bind_to_id=message.reply_to_message.from_user.id)
+                    text = "Utente legato al bot."
+                else:
+                    text = "Non hai il permesso di farlo."
+    bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+
+
 def error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"' % (update, error))
 
@@ -272,6 +299,7 @@ def main():
     dp.add_handler(CommandHandler("goodbye", cmd_goodbye))
     dp.add_handler(CommandHandler("del_welcome", cmd_clear_welcome))
     dp.add_handler(CommandHandler("del_goodbye", cmd_clear_goodbye))
+    dp.add_handler(CommandHandler("bind", cmd_bind))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
