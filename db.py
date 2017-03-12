@@ -430,3 +430,21 @@ class DBHandler:
             result["bound_ids"] += (bind["id"],)
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def get_user(self, user_id):
+        start_time = time.time()
+        result = {"task_name": "get_user",
+                  "user": {}}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        user = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        if user:
+            result["user"] = {"first_name" : user["first_name"],
+                              "last_name"  : user["last_name"],
+                              "username"   : user["username"],
+                              "id"         : user["id"],
+                              "started"    : user["started"],
+                              "bound"      : user["bound"]}
+        result["exec_time"] = time.time() - start_time
+        return(result)
