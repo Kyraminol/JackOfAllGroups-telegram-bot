@@ -448,3 +448,7 @@ class DBHandler:
                               "bound"      : user["bound"]}
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def _markdown_escape(self, text):
+        text = re.sub(r"([\*_`])", r"\\\g<1>", text)
+        return(text)
