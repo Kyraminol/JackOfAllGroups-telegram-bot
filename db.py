@@ -13,7 +13,9 @@ class DBHandler:
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        result = {"task_name": "log"}
+        result = {"task_name"   : "log",
+                  "welcome_msg" : None,
+                  "goodbye_msg" : None}
         # Update User
         user_info = cursor.execute("SELECT * FROM users WHERE id=?", (message.from_user.id,)).fetchone()
         query_user = (message.from_user.first_name,
@@ -72,6 +74,10 @@ class DBHandler:
             needs_goodbye = cursor.execute("SELECT goodbye_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_goodbye:
                 result["goodbye_msg"] = needs_goodbye["goodbye_msg"]
+                if message.left_chat_member.username:
+                    result["welcome_goodbye_name"] = "@%s" % message.left_chat_member.username
+                else:
+                    result["welcome_goodbye_name"] = "%s" % message.left_chat_member.first_name
         if message.new_chat_member:
             cursor.execute("INSERT INTO users_chats(user_id,chat_id) VALUES(?,?)", (message.new_chat_member.id, message.chat.id))
             user_info_new = cursor.execute("SELECT * FROM users WHERE id=?", (message.new_chat_member.id,)).fetchone()
@@ -84,6 +90,10 @@ class DBHandler:
             needs_welcome = cursor.execute("SELECT welcome_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_welcome:
                 result["welcome_msg"] = needs_welcome["welcome_msg"]
+                if message.new_chat_member.username:
+                    result["welcome_goodbye_name"] = "@%s" % message.new_chat_member.username
+                else:
+                    result["welcome_goodbye_name"] = "%s" % message.new_chat_member.first_name
         query_user_chat = (message.from_user.id,
                            message.chat.id,)
         if not user_chat_info:
@@ -255,9 +265,9 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def chat_msgs(self, chat_id, welcome_msg=None, goodbye_msg=None):
+    def welcome_goodbye(self, chat_id, welcome_msg=None, goodbye_msg=None):
         start_time = time.time()
-        result = {"task_name": "chat_msgs"}
+        result = {"task_name": "welcome_goodbye"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -283,7 +293,7 @@ class DBHandler:
         result["goodbye"] = msgs["goodbye_msg"]
         result["welcome"] = msgs["welcome_msg"]
         result["exec_time"] = time.time() - start_time
-        return (result)
+        return(result)
 
     def _get_media(self, message):
         media_id = None
@@ -319,9 +329,17 @@ class DBHandler:
                   "text"       : text}
         return(result)
 
+    def _strip_markdown(self, text):
+        bold = re.findall(r"\*", text)
+        italic = re.findall(r"_", text)
+        if len(bold) % 2 == 0 and len(italic) % 2 == 0:
+            text = re.sub(r"[\*_`]", "", re.sub(r"\[(.+)\]\(.+\)", "\g<1>", text)).strip()
+        return(text)
+
+
     def get_pinned_msg(self, chat_id):
         start_time = time.time()
-        result = {"task_name": "hashtag_set"}
+        result = {"task_name": "get_pinned_msg"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -340,5 +358,54 @@ class DBHandler:
         result["from_id"] = from_id
         result["msg_id"] = msg_id
         result["text"] = text
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def get_msg(self, chat_id, text=None, msg_id=None, full_match=False, case_sensitive=False, from_id=None):
+        start_time = time.time()
+        result = {"task_name": "get_msg"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        result_msg = ()
+        if text:
+            if full_match:
+                if case_sensitive:
+                    query = "SELECT * FROM logs WHERE chat=? AND text=?"
+                else:
+                    query = "SELECT * FROM logs WHERE chat=? AND LOWER(text)=LOWER(?)"
+            else:
+                text_no_md = "%%%s%%" % self._strip_markdown(text)
+                text = "%%%s%%" % text
+                if case_sensitive:
+                    query = "SELECT * FROM logs WHERE chat_id=? AND text LIKE (?)"
+                else:
+                    query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
+            if from_id:
+                query += " AND from_id=%s" % from_id
+            query_args = (chat_id, text)
+            query_args_retry = (chat_id, text_no_md)
+        elif msg_id:
+            query = "SELECT * FROM logs WHERE chat_id=? AND msg_id=?"
+            query_args = (chat_id, msg_id)
+        else:
+            query = None
+        if query:
+            query += " ORDER BY msg_id DESC"
+            msg_db = cursor.execute(query, query_args).fetchall()
+            if not msg_db and query_args_retry:
+                query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
+                if from_id:
+                    query += " AND from_id=%s" % from_id
+                msg_db = cursor.execute(query, query_args_retry).fetchall()
+            for msg in msg_db:
+                result_msg += ({"msg_id"     : msg["msg_id"],
+                                "text"       : msg["text"],
+                                "chat_id"    : msg["chat_id"],
+                                "from_id"    : msg["from_id"],
+                                "media_id"   : msg["media_id"],
+                                "media_type" : msg["media_type"],
+                                "doc_type"   : msg["doc_type"]},)
+        result["msg"] = result_msg
         result["exec_time"] = time.time() - start_time
         return(result)
