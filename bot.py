@@ -57,8 +57,8 @@ def msg_parse(bot, update):
                 msg = logged["welcome_msg"]
             else:
                 msg = logged["goodbye_msg"]
-            msg = re.sub(r"%username%", logged["welcome_goodbye_name"], msg)
-            msg = re.sub(r"%chat%", message.chat.title, msg)
+            msg = re.sub(r"%username%", db._markdown_escape(logged["welcome_goodbye_name"]), msg)
+            msg = re.sub(r"%chat%", db._markdown_escape(message.chat.title), msg)
             db.log(bot.sendMessage(chat_id, msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
         if not message.chat.type == "private":
             admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
