@@ -410,24 +410,43 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def bound(self, bind_to_id=None):
+    def set_bot_admin(self, admin_id):
         start_time = time.time()
-        result = {"task_name": "bound",
-                  "bound_ids": ()}
+        result = {"task_name": "set_bot_admin"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        if bind_to_id:
-            bind_db = cursor.execute("SELECT id FROM users WHERE bound NOT NULL").fetchone()
-            if bind_db:
-                bind_lvl = 1
-            else:
-                bind_lvl = 2
-            cursor.execute("UPDATE users SET bound=? WHERE id=?", (bind_lvl, bind_to_id,))
-            handle.commit()
-        bind_db = cursor.execute("SELECT id FROM users WHERE bound NOT NULL").fetchall()
-        for bind in bind_db:
-            result["bound_ids"] += (bind["id"],)
+        admin_db = cursor.execute("SELECT id FROM users WHERE bot_admin NOT NULL").fetchone()
+        if not admin_db:
+            admin_lvl = 1
+        else:
+            admin_lvl = 2
+        cursor.execute("UPDATE users SET bot_admin=? WHERE id=?", (admin_lvl, admin_id,))
+        handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def remove_bot_admin(self, admin_id):
+        start_time = time.time()
+        result = {"task_name": "remove_bot_admin"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        cursor.execute("UPDATE users SET bot_admin=NULL WHERE id=?", (admin_id,))
+        handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def get_bot_admin(self):
+        start_time = time.time()
+        result = {"task_name": "get_bot_admin",
+                  "admins_id": ()}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        admin_db = cursor.execute("SELECT id FROM users WHERE bot_admin NOT NULL").fetchall()
+        for admin in admin_db:
+            result["admins_id"] += (admin["id"],)
         result["exec_time"] = time.time() - start_time
         return(result)
 
@@ -445,7 +464,7 @@ class DBHandler:
                               "username"   : user["username"],
                               "id"         : user["id"],
                               "started"    : user["started"],
-                              "bound"      : user["bound"]}
+                              "bot_admin"  : user["bot_admin"]}
         result["exec_time"] = time.time() - start_time
         return(result)
 
