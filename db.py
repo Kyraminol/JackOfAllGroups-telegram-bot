@@ -2,6 +2,17 @@
 # -*- coding: utf-8 -*-
 import time, sqlite3, re
 from datetime import datetime
+from flags import Flags
+
+
+class NotifyOptions(Flags):
+    master = ("Interruttore generale",)
+    tag = ("Menzioni",)
+    reply = ("Risposte",)
+    hashtag = ("Hashtag",)
+    pin = ("Messaggi fissati",)
+    silent = ("Notifiche silenziose",)
+
 
 
 class DBHandler:
@@ -488,3 +499,54 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
+    def get_user_options(self, user_id, chat_id=None):
+        start_time = time.time()
+        result = {"task_name"    : "get_user_options",
+                  "options_all"  : (),
+                  "options_true" : (),
+                  "options_text" : {}}
+        for option in NotifyOptions.all_flags:
+            result["options_all"] += (option.name,)
+            result["options_text"][option.name] = option.data
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        if chat_id:
+            query = "SELECT options FROM users_chats WHERE user_id=? AND chat_id=?"
+            query_args = (user_id, chat_id)
+        else:
+            query = "SELECT options FROM users WHERE id=?"
+            query_args = (user_id,)
+        options_db = cursor.execute(query, query_args).fetchone()
+        if options_db:
+            if not options_db["options"] == None:
+                options = NotifyOptions(options_db["options"])
+                for option in options:
+                    result["options_true"] += (option.name,)
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
+    def toggle_user_option(self, user_id, option_name, chat_id=None):
+        start_time = time.time()
+        result = {"task_name"    : "toggle_user_options"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        if chat_id:
+            query = "SELECT options FROM users_chats WHERE user_id=? AND chat_id=?"
+            query_args = (user_id, chat_id)
+            query_commit = "UPDATE users_chats SET options=? WHERE user_id=? AND chat_id=?"
+        else:
+            query = "SELECT options FROM users WHERE id=?"
+            query_args = (user_id,)
+            query_commit = "UPDATE users SET options=? WHERE id=?"
+        options_db = cursor.execute(query, query_args).fetchone()
+        if options_db:
+            current_options = NotifyOptions(options_db["options"])
+            to_toggle = NotifyOptions(option_name)
+            new_options = to_toggle ^ current_options
+            query_args = (int(new_options),) + query_args
+            cursor.execute(query_commit, query_args)
+            handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
