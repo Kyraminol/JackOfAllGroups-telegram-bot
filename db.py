@@ -563,3 +563,14 @@ class DBHandler:
             handle.commit()
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def feedback_add(self, from_id, msg_id):
+        start_time = time.time()
+        result = {"task_name"    : "feedback_add"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        cursor.execute("INSERT INTO feedback(from_id, message_id) VALUES (?,?)", (from_id, msg_id))
+        handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
