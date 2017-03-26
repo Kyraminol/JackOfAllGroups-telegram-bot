@@ -176,9 +176,11 @@ def cmd_markdown(bot, update):
 
 
 def cmd_welcome(bot, update):
+    edited = False
     if update.message:
         message = update.message
     elif update.edited_message:
+        edited = True
         message = update.edited_message
     else:
         message = None
@@ -205,13 +207,19 @@ def cmd_welcome(bot, update):
                     text = "Non puoi usare questa funzione in una conversazione privata."
             else:
                 text = "È necessario un testo dopo il comando."
-            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+            if edited:
+                msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
+                db.log(bot.editMessageText("Messaggio di benvenuto modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+            else:
+                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
 
 
 def cmd_goodbye(bot, update):
+    edited = False
     if update.message:
         message = update.message
     elif update.edited_message:
+        edited = True
         message = update.edited_message
     else:
         message = None
@@ -238,7 +246,11 @@ def cmd_goodbye(bot, update):
                     text = "Non puoi usare questa funzione in una conversazione privata."
             else:
                 text = "È necessario un testo dopo il comando."
-            db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+            if edited:
+                msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
+                db.log(bot.editMessageText("Messaggio di arrivederci modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+            else:
+                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
 
 
 def cmd_clear_welcome(bot, update):
@@ -266,49 +278,61 @@ def cmd_clear_goodbye(bot, update):
 
 
 def cmd_set_bot_admin(bot, update):
-    message = update.message
-    logged = db.log(message)
-    bot_admins = db.get_bot_admin()
-    from_id = message.from_user.id
-    text = ""
-    if not bot_admins["admins_id"]:
-        db.set_bot_admin(from_id)
-        text = "Ti sei impostato come creatore del bot."
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message
     else:
-        if message.reply_to_message:
-            reply_to_id = message.reply_to_message.from_user.id
-            if not reply_to_id == bot.id and not reply_to_id == from_id:
-                user_info = db.get_user(message.from_user.id)
-                if user_info["user"]:
-                    if user_info["user"]["bot_admin"] == 1:
-                        db.set_bot_admin(reply_to_id)
-                        text = "Utente impostato come amministratore del bot."
-                    else:
-                        text = "Non hai il permesso di farlo."
-    if text:
-        bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+        message = None
+    if message:
+        logged = db.log(message)
+        bot_admins = db.get_bot_admin()
+        from_id = message.from_user.id
+        text = ""
+        if not bot_admins["admins_id"]:
+            db.set_bot_admin(from_id)
+            text = "Ti sei impostato come creatore del bot."
+        else:
+            if message.reply_to_message:
+                reply_to_id = message.reply_to_message.from_user.id
+                if not reply_to_id == bot.id and not reply_to_id == from_id and not reply_to_id in bot_admins["admins_id"]:
+                    user_info = db.get_user(message.from_user.id)
+                    if user_info["user"]:
+                        if user_info["user"]["bot_admin"] == 1:
+                            db.set_bot_admin(reply_to_id)
+                            text = "Utente impostato come amministratore del bot."
+                        else:
+                            text = "Non hai il permesso di farlo."
+        if text:
+            bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
 
 
 def cmd_remove_bot_admin(bot, update):
-    message = update.message
-    logged = db.log(message)
-    bot_admins = db.get_bot_admin()
-    bot_admins_id = bot_admins["admins_id"]
-    from_id = message.from_user.id
-    text = ""
-    if bot_admins_id:
-        if message.reply_to_message:
-            reply_to_id = message.reply_to_message.from_user.id
-            if not reply_to_id == bot.id and not reply_to_id == from_id:
-                user_info = db.get_user(from_id)
-                if user_info["user"]["bot_admin"] == 1:
-                    if reply_to_id in bot_admins_id:
-                        db.remove_bot_admin(reply_to_id)
-                        text = "Utente rimosso da amministratore del bot."
-                else:
-                    text = "Non hai il permesso di farlo."
-    if text:
-        bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        message = update.edited_message
+    else:
+        message = None
+    if message:
+        logged = db.log(message)
+        bot_admins = db.get_bot_admin()
+        bot_admins_id = bot_admins["admins_id"]
+        from_id = message.from_user.id
+        text = ""
+        if bot_admins_id:
+            if message.reply_to_message:
+                reply_to_id = message.reply_to_message.from_user.id
+                if not reply_to_id == bot.id and not reply_to_id == from_id:
+                    user_info = db.get_user(from_id)
+                    if user_info["user"]["bot_admin"] == 1:
+                        if reply_to_id in bot_admins_id:
+                            db.remove_bot_admin(reply_to_id)
+                            text = "Utente rimosso da amministratore del bot."
+                    else:
+                        text = "Non hai il permesso di farlo."
+        if text:
+            bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
 
 
 def error(bot, update, error):
@@ -322,12 +346,12 @@ def main():
     dp.add_handler(CommandHandler("md", cmd_markdown, allow_edited=True))
     dp.add_handler(CommandHandler("markdown", cmd_markdown, allow_edited=True))
     dp.add_handler(CommandHandler("pin", cmd_pin, allow_edited=True))
-    dp.add_handler(CommandHandler("welcome", cmd_welcome))
-    dp.add_handler(CommandHandler("goodbye", cmd_goodbye))
+    dp.add_handler(CommandHandler("welcome", cmd_welcome, allow_edited=True))
+    dp.add_handler(CommandHandler("goodbye", cmd_goodbye, allow_edited=True))
     dp.add_handler(CommandHandler("del_welcome", cmd_clear_welcome))
     dp.add_handler(CommandHandler("del_goodbye", cmd_clear_goodbye))
-    dp.add_handler(CommandHandler("set_bot_admin", cmd_set_bot_admin))
-    dp.add_handler(CommandHandler("remove_bot_admin", cmd_remove_bot_admin))
+    dp.add_handler(CommandHandler("set_bot_admin", cmd_set_bot_admin, allow_edited=True))
+    dp.add_handler(CommandHandler("remove_bot_admin", cmd_remove_bot_admin, allow_edited=True))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
