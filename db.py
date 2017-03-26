@@ -336,7 +336,6 @@ class DBHandler:
             text = re.sub(r"[\*_`]", "", re.sub(r"\[(.+)\]\(.+\)", "\g<1>", text)).strip()
         return(text)
 
-
     def get_pinned_msg(self, chat_id):
         start_time = time.time()
         result = {"task_name": "get_pinned_msg"}
@@ -361,51 +360,53 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def get_msg(self, chat_id, text=None, msg_id=None, full_match=False, case_sensitive=False, from_id=None):
+    def get_msg(self, chat_id, text=None, msg_id=None, full_match=False, case_sensitive=False, from_id=None, reply_to=None):
         start_time = time.time()
         result = {"task_name": "get_msg"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
         result_msg = ()
+        query = "SELECT * FROM logs WHERE chat_id=?"
+        query_args = (chat_id,)
+        query_args_retry = ()
         if text:
             if full_match:
                 if case_sensitive:
-                    query = "SELECT * FROM logs WHERE chat=? AND text=?"
+                    query += " AND text=?"
                 else:
-                    query = "SELECT * FROM logs WHERE chat=? AND LOWER(text)=LOWER(?)"
+                    query += " AND LOWER(text)=LOWER(?)"
             else:
                 text_no_md = "%%%s%%" % self._strip_markdown(text)
                 text = "%%%s%%" % text
                 if case_sensitive:
-                    query = "SELECT * FROM logs WHERE chat_id=? AND text LIKE (?)"
+                    query += " AND text LIKE (?)"
                 else:
-                    query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
+                    query += " AND LOWER(text) LIKE LOWER(?)"
+                query_args_retry += (chat_id, text_no_md)
+            query_args += (text,)
+        if msg_id:
+            query += " AND msg_id=?"
+            query_args += (msg_id,)
+        if from_id:
+            query += " AND from_id=%s" % from_id
+        if reply_to:
+            query += " AND replyto_id=%s" % reply_to
+        query += " ORDER BY msg_id DESC"
+        msg_db = cursor.execute(query, query_args).fetchall()
+        if not msg_db and query_args_retry:
+            query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
             if from_id:
                 query += " AND from_id=%s" % from_id
-            query_args = (chat_id, text)
-            query_args_retry = (chat_id, text_no_md)
-        elif msg_id:
-            query = "SELECT * FROM logs WHERE chat_id=? AND msg_id=?"
-            query_args = (chat_id, msg_id)
-        else:
-            query = None
-        if query:
-            query += " ORDER BY msg_id DESC"
-            msg_db = cursor.execute(query, query_args).fetchall()
-            if not msg_db and query_args_retry:
-                query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
-                if from_id:
-                    query += " AND from_id=%s" % from_id
-                msg_db = cursor.execute(query, query_args_retry).fetchall()
-            for msg in msg_db:
-                result_msg += ({"msg_id"     : msg["msg_id"],
-                                "text"       : msg["text"],
-                                "chat_id"    : msg["chat_id"],
-                                "from_id"    : msg["from_id"],
-                                "media_id"   : msg["media_id"],
-                                "media_type" : msg["media_type"],
-                                "doc_type"   : msg["doc_type"]},)
+            msg_db = cursor.execute(query, query_args_retry).fetchall()
+        for msg in msg_db:
+            result_msg += ({"msg_id"     : msg["msg_id"],
+                            "text"       : msg["text"],
+                            "chat_id"    : msg["chat_id"],
+                            "from_id"    : msg["from_id"],
+                            "media_id"   : msg["media_id"],
+                            "media_type" : msg["media_type"],
+                            "doc_type"   : msg["doc_type"]},)
         result["msg"] = result_msg
         result["exec_time"] = time.time() - start_time
         return(result)
