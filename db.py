@@ -472,3 +472,19 @@ class DBHandler:
     def _markdown_escape(self, text):
         text = re.sub(r"([\*_`])", r"\\\g<1>", text)
         return(text)
+
+    def get_user_groups(self, user_id):
+        start_time = time.time()
+        result = {"task_name": "get_user_groups",
+                  "groups": (),}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        chats = cursor.execute("SELECT * FROM users_chats JOIN chats ON users_chats.chat_id=chats.id WHERE users_chats.user_id=? AND chats.type != 'private'", (user_id,)).fetchall()
+        if chats:
+            for chat in chats:
+                result["groups"] += ({"id"    : chat["chat_id"],
+                                     "title" : chat["title"]},)
+        result["exec_time"] = time.time() - start_time
+        return(result)
+
