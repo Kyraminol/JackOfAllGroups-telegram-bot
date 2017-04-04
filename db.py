@@ -19,7 +19,7 @@ class DBHandler:
     def __init__(self, path):
         self._dbpath = path
 
-    def log(self, message):
+    def log(self, message, link_chat_id=None, link_msg_id=None):
         start_time = time.time()
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
@@ -75,9 +75,11 @@ class DBHandler:
                      fwd_from_user,
                      (message.date - datetime(1970, 1, 1)).total_seconds(),
                      replyto_id,
-                     pinned_id,)
+                     pinned_id,
+                     link_chat_id,
+                     link_msg_id)
         if text or media_type or pinned_id:
-            cursor.execute("INSERT INTO logs(from_id,chat_id,msg_id,media_id,media_type,doc_type,text,fwd_from_chat,fwd_from_user,date,replyto_id,pinned_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", query_log)
+            cursor.execute("INSERT INTO logs(from_id,chat_id,msg_id,media_id,media_type,doc_type,text,fwd_from_chat,fwd_from_user,date,replyto_id,pinned_id, linked_chat_id, linked_msg_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", query_log)
         # User List
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
         if message.left_chat_member:
@@ -205,7 +207,6 @@ class DBHandler:
         regex_tag = r"@\w+"
         get_media = self._get_media(message)
         text = get_media["text"]
-        media_id = get_media["media_id"]
         media_type = get_media["media_type"]
         doc_type = get_media["doc_type"]
         if text:
@@ -233,9 +234,9 @@ class DBHandler:
                 if tag_to_notify:
                     if user_id in tag_to_notify:
                         reply_to_notify = None
-        if reply_to_notify and not text and media_type:
+        if reply_to_notify and media_type:
             result["media_type"] = media_type
-            result["media_id"] = media_id
+            result["doc_type"] = doc_type
         result["msg_text"] = text
         result["admin_to_notify"] = admin_to_notify
         result["reply_to_notify"] = reply_to_notify
@@ -243,6 +244,7 @@ class DBHandler:
         result["chat_title"] = message.chat.title
         result["from_user"] = from_user
         result["msg_id"] = message.message_id
+        result["chat_id"] = chat_id
         if message.chat.username:
             result["chat_username"] = message.chat.username
         result["exec_time"] = time.time() - start_time
@@ -384,7 +386,7 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def get_msg(self, chat_id, text=None, msg_id=None, full_match=False, case_sensitive=False, from_id=None, reply_to=None):
+    def get_msg(self, chat_id, text=None, msg_id=None, full_match=False, case_sensitive=False, from_id=None, reply_to=None, linked_chat_id=None, linked_msg_id=None):
         start_time = time.time()
         result = {"task_name": "get_msg"}
         handle = sqlite3.connect(self._dbpath)
@@ -409,14 +411,19 @@ class DBHandler:
                     query += " AND LOWER(text) LIKE LOWER(?)"
                 query_args_retry += (chat_id, text_no_md)
             query_args += (text,)
-        if msg_id:
-            query += " AND msg_id=?"
-            query_args += (msg_id,)
         if from_id:
             query += " AND from_id=%s" % from_id
         if reply_to:
             query += " AND replyto_id=%s" % reply_to
-        query += " ORDER BY msg_id DESC"
+        if linked_chat_id:
+            query += " AND linked_chat_id=%s" % linked_chat_id
+        if linked_msg_id:
+            query += " AND linked_msg_id=%s" % linked_msg_id
+        if msg_id:
+            query += " AND msg_id=%s" % msg_id
+            query += " ORDER BY id DESC"
+        else:
+            query += " ORDER BY msg_id DESC"
         msg_db = cursor.execute(query, query_args).fetchall()
         if not msg_db and query_args_retry:
             query = "SELECT * FROM logs WHERE chat_id=? AND LOWER(text) LIKE LOWER(?)"
