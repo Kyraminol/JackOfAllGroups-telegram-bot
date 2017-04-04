@@ -31,26 +31,30 @@ def cmd_start(bot, update):
         text = "*Oneplus Community Custom Care* ti dà il benvenuto!\n" \
                "Sei registrato per le notifiche!"
         db.started_set(update.message.from_user.id)
-        db.log(bot.sendMessage(chat.id, text, parse_mode=ParseMode.MARKDOWN))
+        db.log(bot.send_message(chat.id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def msg_parse(bot, update):
+    edited = False
     if update.message:
         message = update.message
     elif update.edited_message:
+        edited = True
         message = update.edited_message
     else:
         message = None
     if message:
         chat_id = message.chat.id
+        from_id = message.from_user.id
+        msg_id = message.message_id
         logged = db.log(message)
         if message.new_chat_member:
             if message.new_chat_member.id == bot.id:
                 bound = db.bound()
                 if not message.from_user.id in bound["bound_ids"]:
                     text = "Sono legato al mio creatore, per favore contatta lui per potermi aggiungere."
-                    db.log(bot.sendMessage(message.chat.id, text, parse_mode=ParseMode.MARKDOWN))
-                    bot.leaveChat(message.chat.id)
+                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                    bot.leave_chat(chat_id)
                     return
         if logged["welcome_msg"] or logged["goodbye_msg"]:
             if logged["welcome_msg"]:
@@ -59,25 +63,25 @@ def msg_parse(bot, update):
                 msg = logged["goodbye_msg"]
             msg = re.sub(r"%username%", db._markdown_escape(logged["welcome_goodbye_name"]), msg)
             msg = re.sub(r"%chat%", db._markdown_escape(message.chat.title), msg)
-            db.log(bot.sendMessage(chat_id, msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
+            db.log(bot.send_message(chat_id, msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
         if not message.chat.type == "private":
-            admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+            admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
             fwd_from = None
             if message.forward_from:
                 fwd_from = message.forward_from.id
             if not fwd_from == bot.id:
                 notify = db.notify(message)
-                keyboard = [[InlineKeyboardButton("Vai al messaggio", callback_data="goto.%s" % (notify["msg_id"]))]]
-                if notify["chat_username"]:
+                keyboard = [[InlineKeyboardButton("Vai al messaggio", callback_data="goto.%s.%s" % (notify["chat_id"] ,notify["msg_id"]))]]
+                if "chat_username" in notify:
                     keyboard = [[InlineKeyboardButton("Vai al messaggio", url="https://t.me/%s/%s" % (notify["chat_username"], notify["msg_id"]))]]
                 reply_markup = InlineKeyboardMarkup(keyboard)
                 if notify["tag_to_notify"]:
                     for chat_id in notify["tag_to_notify"]:
                         text = "%s ti ha nominato in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                        db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
+                        db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
                 if notify["reply_to_notify"]:
                     text = "%s ti ha risposto in *%s*" % (notify["from_user"], notify["chat_title"])
-                    if notify["msg_text"]:
+                    if not "media_type" in notify:
                         text += "\n\n_%s_" % notify["msg_text"]
                         reply_markup_reply = reply_markup
                     else:
@@ -85,13 +89,20 @@ def msg_parse(bot, update):
                         if notify["doc_type"] == "video/mp4" or notify["doc_type"] == "video/webm":
                             media_text = media_texts["gif"]
                         text += " con un%s" % media_text
-                        keyboard_media = keyboard + [[InlineKeyboardButton("Visualizza qui media", callback_data="showmedia.%s" % notify["media_id"])]]
+                        if notify["msg_text"]:
+                            text += "\n\nDidascalia: _%s_" % notify["msg_text"]
+                        keyboard_media = keyboard + [[InlineKeyboardButton("Visualizza qui media", callback_data="showmedia.%s.%s" % (chat_id, msg_id))]]
                         reply_markup_reply = InlineKeyboardMarkup(keyboard_media)
-                    db.log(bot.sendMessage(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup_reply))
+                    if edited:
+                        msg = db.get_msg(notify["reply_to_notify"], linked_chat_id=chat_id, linked_msg_id=msg_id)
+                        msg_id = msg["msg"][0]["msg_id"]
+                        db.log(bot.edit_message_text(text, notify["reply_to_notify"], msg_id, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup_reply))
+                    else:
+                        db.log(bot.send_message(notify["reply_to_notify"], text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup_reply), link_chat_id=chat_id, link_msg_id=msg_id)
                 if notify["admin_to_notify"]:
                     for admin_id in notify["admin_to_notify"]:
                         text = "%s ha chiamato un amministratore in *%s*\n\n_%s_" % (notify["from_user"], notify["chat_title"], notify["msg_text"])
-                        db.log(bot.sendMessage(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
+                        db.log(bot.send_message(admin_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
 
 
 def cmd_pin(bot, update):
@@ -114,7 +125,7 @@ def cmd_pin(bot, update):
             if text:
                 is_admin = False
                 if not chat_type == "private":
-                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
                     if message.from_user.id in admins["admins_id"]:
                         is_admin = True
                     if is_admin:
@@ -135,15 +146,17 @@ def cmd_pin(bot, update):
                 text = "È necessario un testo dopo il comando."
                 error = True
             if not error:
-                db.log(bot.editMessageText(text=text, message_id=message_id, chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.edit_message_text(text=text, message_id=message_id, chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
             else:
-                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def cmd_markdown(bot, update):
+    edited = False
     if update.message:
         message = update.message
     elif update.edited_message:
+        edited = True
         message = update.edited_message
     else:
         message = None
@@ -158,21 +171,21 @@ def cmd_markdown(bot, update):
             if text:
                 not_admin = False
                 if not chat_type == "private":
-                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
                     if not message.from_user.id in admins["admins_id"]: # To-Do: Configurable if only admin or not
                         not_admin = True
                 if not_admin:
                     text = "Solo gli amministratori possono usare questa funzione."
             else:
                 text = "È necessario un testo dopo il comando."
-            if update.edited_message:
+            if edited:
                 msg_original = db.get_msg(chat_id, msg_id=message.message_id)
                 cmd_text = re.search(cmd_regex, msg_original["msg"][0]["text"])
                 msg_original = msg_original["msg"][0]["text"][cmd_text.end():].strip()
                 msg_original_bot = db.get_msg(chat_id, text=msg_original, from_id=bot.id)
-                db.log(bot.editMessageText(text, chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.edit_message_text(text, chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
             else:
-                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def cmd_welcome(bot, update):
@@ -195,7 +208,7 @@ def cmd_welcome(bot, update):
             if text:
                 is_admin = False
                 if not chat_type == "private":
-                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
                     if message.from_user.id in admins["admins_id"]:
                         is_admin = True
                     if is_admin:
@@ -209,9 +222,9 @@ def cmd_welcome(bot, update):
                 text = "È necessario un testo dopo il comando."
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
-                db.log(bot.editMessageText("Messaggio di benvenuto modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.edit_message_text("Messaggio di benvenuto modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
             else:
-                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
 
 
 def cmd_goodbye(bot, update):
@@ -234,7 +247,7 @@ def cmd_goodbye(bot, update):
             if text:
                 is_admin = False
                 if not chat_type == "private":
-                    admins = db.update_admins(bot.getChatAdministrators(chat_id), chat_id)
+                    admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
                     if message.from_user.id in admins["admins_id"]:
                         is_admin = True
                     if is_admin:
@@ -248,9 +261,9 @@ def cmd_goodbye(bot, update):
                 text = "È necessario un testo dopo il comando."
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
-                db.log(bot.editMessageText("Messaggio di arrivederci modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.edit_message_text("Messaggio di arrivederci modificato.", chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
             else:
-                db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
 
 
 def cmd_clear_welcome(bot, update):
@@ -262,7 +275,7 @@ def cmd_clear_welcome(bot, update):
         text = "Messaggio di benvenuto rimosso."
     else:
         text = "Non puoi usare questa funzione in una conversazione privata."
-    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def cmd_clear_goodbye(bot, update):
@@ -274,7 +287,7 @@ def cmd_clear_goodbye(bot, update):
         text = "Messaggio di arrivederci rimosso."
     else:
         text = "Non puoi usare questa funzione in una conversazione privata."
-    db.log(bot.sendMessage(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
 
 
 def cmd_set_bot_admin(bot, update):
@@ -304,7 +317,7 @@ def cmd_set_bot_admin(bot, update):
                         else:
                             text = "Non hai il permesso di farlo."
         if text:
-            bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+            bot.send_message(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
 
 
 def cmd_remove_bot_admin(bot, update):
@@ -332,7 +345,8 @@ def cmd_remove_bot_admin(bot, update):
                     else:
                         text = "Non hai il permesso di farlo."
         if text:
-            bot.sendMessage(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+            bot.send_message(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+
 
 
 def error(bot, update, error):
