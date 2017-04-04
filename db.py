@@ -195,6 +195,7 @@ class DBHandler:
         tag_to_notify = ()
         reply_to_notify = None
         admin_to_notify = ()
+        hashtag_to_notify = {}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -204,7 +205,6 @@ class DBHandler:
             from_user = "@%s" % message.from_user.username
         else:
             from_user = message.from_user.first_name
-        regex_tag = r"@\w+"
         get_media = self._get_media(message)
         text = get_media["text"]
         media_type = get_media["media_type"]
@@ -222,6 +222,8 @@ class DBHandler:
                     if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
                         reply_to_notify = user_id
         if text:
+            regex_tag = r"@\w+"
+            regex_hashtag = r"#\w+"
             tags = re.finditer(regex_tag, text, re.MULTILINE)
             for tag in tags:
                 username = tag.group()
@@ -243,6 +245,21 @@ class DBHandler:
                                 user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
                                 if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info and not user_id == from_id and not user_id == reply_to_notify:
                                     tag_to_notify += (user_id,)
+            hashtags = re.finditer(regex_hashtag, text, re.MULTILINE)
+            for i_hashtag in hashtags:
+                hashtag = i_hashtag.group()
+                users_db = cursor.execute("SELECT * FROM users_hashtags WHERE hashtag=? AND (chat_id=0 OR chat_id=?)", (hashtag[1:], chat_id)).fetchall()
+                for user_db in users_db:
+                    user_id = user_db["user_id"]
+                    hashtag_db = user_db["hashtag"]
+                    user_chat = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (chat_id, user_id)).fetchone()
+                    if not user_chat or user_id == from_id:
+                        continue
+                    if user_id in hashtag_to_notify:
+                        if not hashtag_db in hashtag_to_notify[user_id]:
+                            hashtag_to_notify[user_id] += (hashtag_db,)
+                    else:
+                        hashtag_to_notify[user_id] = (hashtag_db,)
         if media_type:
             result["media_type"] = media_type
             result["doc_type"] = doc_type
@@ -250,6 +267,7 @@ class DBHandler:
         result["admin_to_notify"] = admin_to_notify
         result["reply_to_notify"] = reply_to_notify
         result["tag_to_notify"] = tag_to_notify
+        result["hashtag_to_notify"] = hashtag_to_notify
         result["chat_title"] = message.chat.title
         result["from_user"] = from_user
         result["msg_id"] = message.message_id
