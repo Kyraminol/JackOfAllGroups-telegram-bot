@@ -196,6 +196,7 @@ class DBHandler:
         reply_to_notify = None
         admin_to_notify = ()
         hashtag_to_notify = {}
+        pinned = {}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -209,6 +210,26 @@ class DBHandler:
         text = get_media["text"]
         media_type = get_media["media_type"]
         doc_type = get_media["doc_type"]
+        if message.pinned_message:
+            get_media_pinned = self._get_media(message.pinned_message)
+            pinned["text"] = get_media_pinned["text"]
+            pinned["media_type"] = get_media_pinned["media_type"]
+            pinned["doc_type"] = get_media_pinned["doc_type"]
+            pinned["chat_id"] = message.pinned_message.chat.id
+            pinned["to_notify"] = ()
+            users_db = cursor.execute("SELECT * FROM users_chats WHERE chat_id=?", (pinned["chat_id"],))
+            for user_db in users_db:
+                user_id = user_db["user_id"]
+                user_options_global = self.get_user_options(user_id)
+                user_options_global = user_options_global["options_true"]
+                if "master" in user_options_global and "pin" in user_options_global:
+                    user_options_chat = self.get_user_options(user_id, pinned["chat_id"])
+                    user_options_chat = user_options_chat["options_true"]
+                    if "master" in user_options_chat and "pin" in user_options_chat:
+                        user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                        if user_info["started"] == 1 and not user_id == from_id:
+                            pinned["to_notify"] += (user_id,)
+            print(pinned)
         if message.reply_to_message:
             user_id = message.reply_to_message.from_user.id
             user_options_global = self.get_user_options(user_id)
