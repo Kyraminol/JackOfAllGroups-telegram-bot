@@ -36,7 +36,8 @@ class DBHandler:
         if user_info:
             cursor.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?", query_user)
         else:
-            cursor.execute("INSERT INTO users(first_name,last_name,username,id) VALUES(?,?,?,?)", query_user)
+            query_user += (int(NotifyOptions.all_flags - NotifyOptions.silent),)
+            cursor.execute("INSERT INTO users(first_name,last_name,username,id,options) VALUES(?,?,?,?,?)", query_user)
         # Update Chat
         chat_info = cursor.execute("SELECT * FROM chats WHERE id=?", (message.chat.id,)).fetchone()
         query_chat = (message.chat.title,
@@ -83,7 +84,7 @@ class DBHandler:
         # User List
         user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.from_user.id)).fetchone()
         if message.left_chat_member:
-            cursor.execute("DELETE FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.left_chat_member.id))
+            cursor.execute("UPDATE users_chats SET leaved=1 WHERE chat_id=? AND user_id=?", (message.chat.id, message.left_chat_member.id))
             needs_goodbye = cursor.execute("SELECT goodbye_msg FROM chats WHERE id=?", (message.chat.id,)).fetchone()
             if needs_goodbye:
                 result["goodbye_msg"] = needs_goodbye["goodbye_msg"]
@@ -107,10 +108,11 @@ class DBHandler:
                     result["welcome_goodbye_name"] = "@%s" % message.new_chat_member.username
                 else:
                     result["welcome_goodbye_name"] = "%s" % message.new_chat_member.first_name
-        query_user_chat = (message.from_user.id,
-                           message.chat.id,)
         if not user_chat_info:
-            cursor.execute("INSERT INTO users_chats(user_id,chat_id) VALUES(?,?)", query_user_chat)
+            query_user_chat = (message.from_user.id,
+                               message.chat.id,
+                               int(NotifyOptions.all_flags - NotifyOptions.silent),)
+            cursor.execute("INSERT INTO users_chats(user_id,chat_id,options) VALUES(?,?,?)", query_user_chat)
         handle.commit()
         result["exec_time"] = time.time() - start_time
         return(result)
@@ -139,16 +141,18 @@ class DBHandler:
             if user_info:
                 cursor.execute("UPDATE users SET first_name=?,last_name=?,username=? WHERE id=?", query_user)
             else:
-                cursor.execute("INSERT INTO users(first_name,last_name,username,id) VALUES(?,?,?,?)", query_user)
+                query_user += (int(NotifyOptions.all_flags - NotifyOptions.silent),)
+                cursor.execute("INSERT INTO users(first_name,last_name,username,id,options) VALUES(?,?,?,?,?)", query_user)
             # User_chat
             user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (admin.user.id, chat)).fetchone()
             query_user_chat_add = (admin.status,
-                               admin.user.id,
-                               chat,)
+                                   admin.user.id,
+                                   chat,)
             if user_chat_info:
                 cursor.execute("UPDATE users_chats SET status=? WHERE user_id=? AND chat_id=?", query_user_chat_add)
             else:
-                cursor.execute("INSERT INTO users_chats(status,user_id,chat_id) VALUES(?,?,?)", query_user_chat_add)
+                query_user_chat_add += (int(NotifyOptions.all_flags - NotifyOptions.silent),)
+                cursor.execute("INSERT INTO users_chats(status,user_id,chat_id,options) VALUES(?,?,?,?)", query_user_chat_add)
         # Remove old admins
         old_admins = cursor.execute("SELECT user_id FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator')", (chat,)).fetchall()
         for admin in old_admins:
@@ -327,7 +331,6 @@ class DBHandler:
                             result["hashtags_not_added"] += (hashtag,)
                 else:
                     if hashtag in hashtags_db:
-                        print(query_hashtag)
                         cursor.execute("DELETE FROM users_hashtags WHERE chat_id=? AND user_id=? AND hashtag=?", query_hashtag)
                         hashtags_db.remove(hashtag)
                         result["hashtags_removed"] += (hashtag,)
@@ -422,8 +425,6 @@ class DBHandler:
         pinned_db = cursor.execute("SELECT pinned_id FROM logs WHERE chat_id=? AND pinned_id NOT NULL ORDER BY msg_id DESC", (chat_id,)).fetchone()
         if pinned_db:
             pinned_msg_db = cursor.execute("SELECT * FROM logs WHERE chat_id=? AND msg_id=?", (chat_id, pinned_db["pinned_id"])).fetchone()
-            print(pinned_db)
-            print(pinned_msg_db)
             if pinned_msg_db:
                 from_id = pinned_msg_db["from_id"]
                 msg_id = pinned_msg_db["msg_id"]
@@ -559,7 +560,7 @@ class DBHandler:
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        chats = cursor.execute("SELECT * FROM users_chats JOIN chats ON users_chats.chat_id=chats.id WHERE users_chats.user_id=? AND chats.type != 'private'", (user_id,)).fetchall()
+        chats = cursor.execute("SELECT * FROM users_chats JOIN chats ON users_chats.chat_id=chats.id WHERE users_chats.user_id=? AND chats.type != 'private' AND users_chats.leaved IS NULL", (user_id,)).fetchall()
         if chats:
             for chat in chats:
                 result["groups"] += ({"id"    : chat["chat_id"],
