@@ -480,13 +480,19 @@ class DBHandler:
                 query += " AND from_id=%s" % from_id
             msg_db = cursor.execute(query, query_args_retry).fetchall()
         for msg in msg_db:
+            pinned_msg_id = None
+            if msg["pinned_id"]:
+                get_pinned = self.get_msg(msg["chat_id"], msg_id=msg["pinned_id"])
+                msg = get_pinned["msg"][0]
+                pinned_msg_id = msg["msg_id"]
             result_msg += ({"msg_id"     : msg["msg_id"],
                             "text"       : msg["text"],
                             "chat_id"    : msg["chat_id"],
                             "from_id"    : msg["from_id"],
                             "media_id"   : msg["media_id"],
                             "media_type" : msg["media_type"],
-                            "doc_type"   : msg["doc_type"]},)
+                            "doc_type"   : msg["doc_type"],
+                            "pinned_id"  : pinned_msg_id},)
         result["msg"] = result_msg
         result["exec_time"] = time.time() - start_time
         return(result)
