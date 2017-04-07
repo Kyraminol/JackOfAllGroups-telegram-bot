@@ -182,13 +182,13 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def started_set(self, user_id):
+    def started_set(self, user_id, reset=False):
         start_time = time.time()
         result = {"task_name": "set_started"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
-        cursor.execute("UPDATE users SET started=1 WHERE id=?", (user_id,))
+        cursor.execute("UPDATE users SET started=? WHERE id=?", (int(not reset), user_id,))
         handle.commit()
         result["exec_time"] = time.time() - start_time
         return(result)
