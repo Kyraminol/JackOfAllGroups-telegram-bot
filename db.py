@@ -196,11 +196,7 @@ class DBHandler:
     def notify(self, message):
         start_time = time.time()
         result = {"task_name": "notify"}
-        tag_to_notify = ()
-        reply_to_notify = None
-        admin_to_notify = ()
-        hashtag_to_notify = {}
-        pinned = {}
+        to_notify = {}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
@@ -210,89 +206,110 @@ class DBHandler:
             from_user = "@%s" % message.from_user.username
         else:
             from_user = message.from_user.first_name
-        get_media = self._get_media(message)
-        text = get_media["text"]
-        media_type = get_media["media_type"]
-        doc_type = get_media["doc_type"]
         if message.pinned_message:
-            get_media_pinned = self._get_media(message.pinned_message)
-            pinned["text"] = get_media_pinned["text"]
-            pinned["media_type"] = get_media_pinned["media_type"]
-            pinned["doc_type"] = get_media_pinned["doc_type"]
-            pinned["chat_id"] = message.pinned_message.chat.id
-            pinned["to_notify"] = ()
-            users_db = cursor.execute("SELECT * FROM users_chats WHERE chat_id=?", (pinned["chat_id"],))
+            get_media = self._get_media(message.pinned_message)
+            text = get_media["text"]
+            media_type = get_media["media_type"]
+            doc_type = get_media["doc_type"]
+            chat_id = message.pinned_message.chat.id
+            users_db = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND leaved IS NULL", (chat_id,)).fetchall()
             for user_db in users_db:
                 user_id = user_db["user_id"]
                 user_options_global = self.get_user_options(user_id)
                 user_options_global = user_options_global["options_true"]
                 if "master" in user_options_global and "pin" in user_options_global:
-                    user_options_chat = self.get_user_options(user_id, pinned["chat_id"])
+                    user_options_chat = self.get_user_options(user_id, chat_id)
                     user_options_chat = user_options_chat["options_true"]
                     if "master" in user_options_chat and "pin" in user_options_chat:
                         user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
                         if user_info["started"] == 1 and not user_id == from_id:
-                            pinned["to_notify"] += (user_id,)
-            print(pinned)
-        if message.reply_to_message:
-            user_id = message.reply_to_message.from_user.id
-            user_options_global = self.get_user_options(user_id)
-            user_options_global = user_options_global["options_true"]
-            if "master" in user_options_global and "reply" in user_options_global:
-                user_options_chat = self.get_user_options(user_id, chat_id)
-                user_options_chat = user_options_chat["options_true"]
-                if "master" in user_options_chat and "reply" in user_options_chat:
-                    user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-                    user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-                    if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
-                        reply_to_notify = user_id
-        if text:
-            regex_tag = r"@\w+"
-            regex_hashtag = r"#\w+"
-            tags = re.finditer(regex_tag, text, re.MULTILINE)
-            for tag in tags:
-                username = tag.group()
-                if username == "@admin":
-                    admin_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator')", (chat_id,)).fetchall()
-                    for admin in admin_chat_info:
-                        if not admin["user_id"] == from_id:
-                            admin_to_notify += (admin["user_id"],)
-                else:
-                    user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
-                    if user_info:
-                        user_id = user_info["id"]
-                        user_options_global = self.get_user_options(user_id)
-                        user_options_global = user_options_global["options_true"]
-                        if "master" in user_options_global and "tag" in user_options_global:
-                            user_options_chat = self.get_user_options(user_id, chat_id)
-                            user_options_chat = user_options_chat["options_true"]
-                            if "master" in user_options_chat and "tag" in user_options_chat:
-                                user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=?", (user_id, chat_id)).fetchone()
-                                if user_info["started"] == 1 and user_id not in tag_to_notify and user_chat_info and not user_id == from_id and not user_id == reply_to_notify:
-                                    tag_to_notify += (user_id,)
-            hashtags = re.finditer(regex_hashtag, text, re.MULTILINE)
-            for i_hashtag in hashtags:
-                hashtag = i_hashtag.group()
-                users_db = cursor.execute("SELECT * FROM users_hashtags WHERE hashtag=? AND (chat_id=0 OR chat_id=?)", (hashtag[1:], chat_id)).fetchall()
-                for user_db in users_db:
-                    user_id = user_db["user_id"]
-                    hashtag_db = user_db["hashtag"]
-                    user_chat = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (chat_id, user_id)).fetchone()
-                    if not user_chat or user_id == from_id:
-                        continue
-                    if user_id in hashtag_to_notify:
-                        if not hashtag_db in hashtag_to_notify[user_id]:
-                            hashtag_to_notify[user_id] += (hashtag_db,)
-                    else:
-                        hashtag_to_notify[user_id] = (hashtag_db,)
-        if media_type:
-            result["media_type"] = media_type
-            result["doc_type"] = doc_type
-        result["msg_text"] = text
-        result["admin_to_notify"] = admin_to_notify
-        result["reply_to_notify"] = reply_to_notify
-        result["tag_to_notify"] = tag_to_notify
-        result["hashtag_to_notify"] = hashtag_to_notify
+                            if not user_id in to_notify:
+                                to_notify[user_id] = {"type" : "pin"}
+                                if "silent" in user_options_global or "silent" in user_options_chat:
+                                    to_notify[user_id]["silent"] = True
+        else:
+            get_media = self._get_media(message)
+            text = get_media["text"]
+            media_type = get_media["media_type"]
+            doc_type = get_media["doc_type"]
+            if message.reply_to_message:
+                user_id = message.reply_to_message.from_user.id
+                user_options_global = self.get_user_options(user_id)
+                user_options_global = user_options_global["options_true"]
+                if "master" in user_options_global and "reply" in user_options_global:
+                    user_options_chat = self.get_user_options(user_id, chat_id)
+                    user_options_chat = user_options_chat["options_true"]
+                    if "master" in user_options_chat and "reply" in user_options_chat:
+                        user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                        user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=? AND leaved IS NULL", (user_id, chat_id)).fetchone()
+                        if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
+                            if not user_id in to_notify:
+                                to_notify[user_id] = {"type" : "reply"}
+                                if "silent" in user_options_global or "silent" in user_options_chat:
+                                    to_notify[user_id]["silent"] = True
+            if text:
+                    regex_tag = r"@\w+"
+                    regex_hashtag = r"#\w+"
+                    tags = re.finditer(regex_tag, text, re.MULTILINE)
+                    for tag in tags:
+                        username = tag.group()
+                        if username == "@admin":
+                            admin_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND (status='creator' OR status='administrator') AND leaved IS NULL", (chat_id,)).fetchall()
+                            for admin in admin_chat_info:
+                                user_id = admin["user_id"]
+                                if not user_id == from_id:
+                                    if not user_id in to_notify:
+                                        to_notify[user_id] = {"type" : "admin_call"}
+                        else:
+                            user_info = cursor.execute("SELECT * FROM users WHERE LOWER(username)=LOWER(?)", (username[1:],)).fetchone()
+                            if user_info:
+                                user_id = user_info["id"]
+                                user_options_global = self.get_user_options(user_id)
+                                user_options_global = user_options_global["options_true"]
+                                silent = False
+                                if "master" in user_options_global and "tag" in user_options_global:
+                                    user_options_chat = self.get_user_options(user_id, chat_id)
+                                    user_options_chat = user_options_chat["options_true"]
+                                    if "master" in user_options_chat and "tag" in user_options_chat:
+                                        user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE user_id=? AND chat_id=? AND leaved IS NULL", (user_id, chat_id)).fetchone()
+                                        if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
+                                            if not user_id in to_notify:
+                                                to_notify[user_id] = {"type" : "tag"}
+                                                if "silent" in user_options_global or "silent" in user_options_chat:
+                                                    to_notify[user_id]["silent"] = True
+                    hashtags = re.finditer(regex_hashtag, text, re.MULTILINE)
+                    for i_hashtag in hashtags:
+                        hashtag = i_hashtag.group()
+                        users_db = cursor.execute("SELECT * FROM users_hashtags WHERE hashtag=? AND (chat_id=0 OR chat_id=?)", (hashtag[1:], chat_id)).fetchall()
+                        for user_db in users_db:
+                            user_id = user_db["user_id"]
+                            hashtag_db = user_db["hashtag"]
+
+                            user_options_global = self.get_user_options(user_id)
+                            user_options_global = user_options_global["options_true"]
+                            silent = False
+                            if "master" in user_options_global and "tag" in user_options_global:
+                                user_options_chat = self.get_user_options(user_id, chat_id)
+                                user_options_chat = user_options_chat["options_true"]
+                                if "master" in user_options_chat and "tag" in user_options_chat:
+                                    user_info = cursor.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+                                    user_chat_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=? AND leaved IS NULL", (chat_id, user_id)).fetchone()
+                                    if user_info["started"] == 1 and user_chat_info and not user_id == from_id:
+                                        if user_id in to_notify:
+                                            if "hashtag" in to_notify[user_id]:
+                                                if not hashtag_db in to_notify[user_id]["hashtag"]:
+                                                    to_notify[user_id]["hashtag"] += (hashtag_db,)
+                                            else:
+                                                to_notify[user_id]["hashtag"] = (hashtag_db,)
+                                        else:
+                                            to_notify[user_id] = {"hashtag": (hashtag_db,),
+                                                                  "type": "hashtag"}
+                                        if "silent" in user_options_global or "silent" in user_options_chat:
+                                            to_notify[user_id]["silent"] = True
+        result["media_type"] = media_type
+        result["doc_type"] = doc_type
+        result["text"] = text
+        result["to_notify"] = to_notify
         result["chat_title"] = message.chat.title
         result["from_user"] = from_user
         result["msg_id"] = message.message_id
