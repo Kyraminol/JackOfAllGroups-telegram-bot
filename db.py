@@ -654,3 +654,39 @@ class DBHandler:
         handle.commit()
         result["exec_time"] = time.time() - start_time
         return(result)
+
+    def shortcut(self, chat_id, shortcut_name, shortcut_content=None, remove=False):
+        start_time = time.time()
+        result = {"task_name"    : "shortcut"}
+        handle = sqlite3.connect(self._dbpath)
+        handle.row_factory = sqlite3.Row
+        cursor = handle.cursor()
+        action = ""
+        query_data = (chat_id, shortcut_name)
+        shortcut = cursor.execute("SELECT * FROM shortcuts WHERE chat_id=? AND shortcut_name=?", query_data).fetchone()
+        if remove == True:
+            if shortcut:
+                cursor.execute("DELETE FROM shortcuts WHERE chat_id=? AND shortcut_name=?", query_data)
+                action = "removed"
+            else:
+                action = "not_removed"
+        elif shortcut_content:
+            query_data = (shortcut_content,) + query_data
+            if shortcut:
+                cursor.execute("UPDATE shortcuts SET shortcut_content=? WHERE chat_id=? AND shortcut_name=?", query_data)
+                action = "modified"
+            else:
+                cursor.execute("INSERT INTO shortcuts(shortcut_content, chat_id, shortcut_name) VALUES (?,?,?)", query_data)
+                action = "added"
+        else:
+            action = "get"
+            result["shortcut"] = {}
+            if shortcut:
+                result["shortcut"] = {"chat_id"          : shortcut["chat_id"],
+                                      "shortcut_name"    : shortcut["shortcut_name"],
+                                      "shortcut_content" : shortcut["shortcut_content"],
+                                      "shortcut_extra"   : shortcut["shortcut_extra"]}
+        result["action"] = action
+        handle.commit()
+        result["exec_time"] = time.time() - start_time
+        return(result)
