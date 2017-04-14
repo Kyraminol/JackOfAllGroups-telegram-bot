@@ -74,7 +74,7 @@ class DBHandler:
                      text,
                      fwd_from_chat,
                      fwd_from_user,
-                     (message.date - datetime(1970, 1, 1)).total_seconds(),
+                     time.mktime(message.date.timetuple()),
                      replyto_id,
                      pinned_id,
                      link_chat_id,
@@ -509,7 +509,8 @@ class DBHandler:
                             "media_id"   : msg["media_id"],
                             "media_type" : msg["media_type"],
                             "doc_type"   : msg["doc_type"],
-                            "pinned_id"  : pinned_msg_id},)
+                            "pinned_id"  : pinned_msg_id,
+                            "timestamp"  : msg["date"]},)
         result["msg"] = result_msg
         result["exec_time"] = time.time() - start_time
         return(result)
