@@ -10,7 +10,7 @@ Database schema will be included soon, I've changed it quite frequently so I hav
 ## How to
 
 ```
-$ sudo pip install --upgrade python-telegram-bot py-flags sqlite3
+$ sudo pip install --upgrade python-telegram-bot py-flags sqlite3 mistune
 $ git clone https://github.com/Kyraminol/JackOfAllGroups-telegram-bot.git
 $ cd JackOfAllGroups-telegram-bot
 $ python bot.py

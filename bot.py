@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging, re, urllib3
+import logging, re, urllib3, mistune
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler
 from telegram import ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import Unauthorized, BadRequest
 from db import DBHandler
 from time import time
+from simple_renderer import SimplestRenderer
+from pprint import pprint
 urllib3.disable_warnings()
 
 # Logger Config
@@ -16,6 +18,10 @@ logger = logging.getLogger(__name__)
 
 # DB Config
 db = DBHandler("logger.sqlite")
+
+# Mistune markdown handler
+renderer = SimplestRenderer()
+markdown = mistune.Markdown(renderer=renderer)
 
 # Temp media_type -> italian text dictionary
 media_texts = {"voice"    : " messaggio vocale",
@@ -62,6 +68,14 @@ def markdown_escape(text):
     return(text)
 
 
+def markdown_to_html(text):
+    escape_newlines = re.sub(r"\n", "%%%%NEWLINE%%%%", text)
+    escape_html = renderer.escape(text=escape_newlines)
+    html = markdown(escape_html)
+    restore_newlines = re.sub(r"%%%%NEWLINE%%%%", "\n", html)
+    return(restore_newlines)
+
+
 def cmd_start(bot, update):
     msg_parse(bot, update)
     chat = update.message.chat
@@ -70,7 +84,7 @@ def cmd_start(bot, update):
                "Sei registrato per le notifiche!\n" \
                "Usa /settings per aprire il pannello impostazioni, troverai anche un aiuto su come usare al meglio il bot!."
         db.started_set(update.message.from_user.id)
-        db.log(bot.send_message(chat.id, text, parse_mode=ParseMode.MARKDOWN))
+        db.log(bot.send_message(chat.id, markdown_to_html(text), parse_mode=ParseMode.HTML))
 
 
 def msg_parse(bot, update):
@@ -92,7 +106,7 @@ def msg_parse(bot, update):
                 bot_admins = db.get_bot_admin()
                 if bot_admins["admins_id"] and not message.from_user.id in bot_admins["admins_id"]:
                     text = "Non sei uno dei miei amministratori, per favore contatta uno di loro per potermi aggiungere."
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML))
                     bot.leave_chat(chat_id)
                     return
         if logged["welcome_msg"] or logged["goodbye_msg"]:
@@ -102,7 +116,7 @@ def msg_parse(bot, update):
                 msg = logged["goodbye_msg"]
             msg = re.sub(r"%username%", markdown_escape(logged["welcome_goodbye_name"]), msg)
             msg = re.sub(r"%chat%", markdown_escape(message.chat.title), msg)
-            db.log(bot.send_message(chat_id, msg, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
+            db.log(bot.send_message(chat_id, markdown_to_html(msg), parse_mode=ParseMode.HTML, disable_web_page_preview=True))
         if not message.chat.type == "private":
             admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
             fwd_from = None
@@ -154,10 +168,10 @@ def msg_parse(bot, update):
                     if edited:
                         original_msg = db.get_msg(user_id, linked_chat_id=to_notify["chat_id"], linked_msg_id=to_notify["msg_id"])
                         original_msg = original_msg["msg"][0]
-                        db.log(bot.edit_message_text(text, user_id, original_msg["msg_id"], parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup, disable_notification=disable_notification))
+                        db.log(bot.edit_message_text(markdown_to_html(text), user_id, original_msg["msg_id"], parse_mode=ParseMode.HTML, reply_markup=reply_markup, disable_notification=disable_notification))
                     else:
                         try:
-                            db.log(bot.send_message(user_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup, disable_notification=disable_notification), link_chat_id=chat_id, link_msg_id=msg_id)
+                            db.log(bot.send_message(user_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_markup=reply_markup, disable_notification=disable_notification), link_chat_id=chat_id, link_msg_id=msg_id)
                         except Unauthorized:
                             db.started_set(user_id, reset=True)
                 regex_shortcut = r"^!\w+$"
@@ -176,11 +190,11 @@ def msg_parse(bot, update):
                         if edited:
                             msg_original_bot = db.get_msg(chat_id, reply_to=reply_to_id, from_id=bot.id)
                             if msg_original_bot["msg"]:
-                                db.log(bot.edit_message_text(shortcut_content, chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
+                                db.log(bot.edit_message_text(markdown_to_html(shortcut_content), chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML, disable_web_page_preview=True))
                             else:
-                                db.log(bot.send_message(chat_id, shortcut_content, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                                db.log(bot.send_message(chat_id, markdown_to_html(shortcut_content), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
                         else:
-                            db.log(bot.send_message(chat_id, shortcut_content, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                            db.log(bot.send_message(chat_id, markdown_to_html(shortcut_content), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
         else:
             text = ""
             keyboard = []
@@ -219,7 +233,7 @@ def msg_parse(bot, update):
                 keyboard += [[InlineKeyboardButton("Indietro", callback_data="main")]]
             if text:
                 reply_markup = InlineKeyboardMarkup(keyboard)
-                db.log(bot.send_message(from_id, text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup))
+                db.log(bot.send_message(from_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_markup=reply_markup))
 
 
 def cmd_pin(bot, update):
@@ -263,9 +277,9 @@ def cmd_pin(bot, update):
                 text = "È necessario un testo dopo il comando."
                 error = True
             if not error:
-                db.log(bot.edit_message_text(text=text, message_id=message_id, chat_id=chat_id, parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.edit_message_text(text=markdown_to_html(text), message_id=message_id, chat_id=chat_id, parse_mode=ParseMode.HTML))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML))
 
 
 def cmd_markdown(bot, update):
@@ -302,11 +316,11 @@ def cmd_markdown(bot, update):
             if edited:
                 msg_original_bot = db.get_msg(chat_id, reply_to=reply_to_id, from_id=bot.id)
                 if msg_original_bot:
-                    db.log(bot.edit_message_text(text, chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True))
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML, disable_web_page_preview=True))
                 else:
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
 
 
 def cmd_welcome(bot, update):
@@ -344,11 +358,11 @@ def cmd_welcome(bot, update):
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
                 if msg_bot:
-                    db.log(bot.edit_message_text(text, chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML))
                 else:
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
 
 
 def cmd_goodbye(bot, update):
@@ -386,11 +400,11 @@ def cmd_goodbye(bot, update):
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
                 if msg_bot:
-                    db.log(bot.edit_message_text(text, chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML))
                 else:
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
 
 
 def cmd_clear_welcome(bot, update):
@@ -402,7 +416,7 @@ def cmd_clear_welcome(bot, update):
         text = "Messaggio di benvenuto rimosso."
     else:
         text = "Non puoi usare questa funzione in una conversazione privata."
-    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML))
 
 
 def cmd_clear_goodbye(bot, update):
@@ -414,7 +428,7 @@ def cmd_clear_goodbye(bot, update):
         text = "Messaggio di arrivederci rimosso."
     else:
         text = "Non puoi usare questa funzione in una conversazione privata."
-    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN))
+    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML))
 
 
 def cmd_set_bot_admin(bot, update):
@@ -444,7 +458,7 @@ def cmd_set_bot_admin(bot, update):
                         else:
                             text = "Non hai il permesso di farlo."
         if text:
-            bot.send_message(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+            bot.send_message(message.chat.id, markdown_to_html(text), reply_to_message_id=message.message_id, parse_mode=ParseMode.HTML)
 
 
 def cmd_remove_bot_admin(bot, update):
@@ -472,7 +486,7 @@ def cmd_remove_bot_admin(bot, update):
                     else:
                         text = "Non hai il permesso di farlo."
         if text:
-            bot.send_message(message.chat.id, text, reply_to_message_id=message.message_id, parse_mode=ParseMode.MARKDOWN)
+            bot.send_message(message.chat.id, markdown_to_html(text), reply_to_message_id=message.message_id, parse_mode=ParseMode.HTML)
 
 
 def cmd_shortcut_set(bot, update):
@@ -519,11 +533,11 @@ def cmd_shortcut_set(bot, update):
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
                 if msg_bot:
-                    db.log(bot.edit_message_text(text, chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML))
                 else:
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
 
 
 def cmd_shortcut_del(bot, update):
@@ -570,11 +584,11 @@ def cmd_shortcut_del(bot, update):
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
                 if msg_bot:
-                    db.log(bot.edit_message_text(text, chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.MARKDOWN))
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML))
                 else:
-                    db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
             else:
-                db.log(bot.send_message(chat_id, text, parse_mode=ParseMode.MARKDOWN, reply_to_message_id=message.message_id))
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
 
 
 def cmd_settings(bot, update):
@@ -590,7 +604,7 @@ def cmd_settings(bot, update):
         keyboard += [[InlineKeyboardButton("Lascia un suggerimento", callback_data="feedback.leave"),
                       InlineKeyboardButton("Informazioni sviluppatore", callback_data="dev.info")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        bot.send_message(message.chat.id, text, reply_to_message_id=message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN)
+        bot.send_message(message.chat.id, markdown_to_html(text), reply_to_message_id=message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
 
 
 def inline_button_callback(bot, update):
@@ -748,7 +762,7 @@ def inline_button_callback(bot, update):
             except BadRequest:
                 answer_text = "Il messaggio originale è stato eliminato!"
     reply_markup = InlineKeyboardMarkup(keyboard)
-    if text:
+    if text or media_type:
         if new_msg:
             if media_type:
                 if media_type == "audio":
@@ -764,12 +778,12 @@ def inline_button_callback(bot, update):
                 elif media_type == "voice":
                     bot.send_voice(chat_id=chat_id, voice=media_id)
             else:
-                bot.send_message(text=text, chat_id=chat_id, message_id=query.message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview="true")
+                bot.send_message(text=markdown_to_html(text), chat_id=chat_id, message_id=query.message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
         else:
             if query.message:
-                bot.edit_message_text(text=text, chat_id=chat_id, message_id=query.message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview="true")
+                bot.edit_message_text(text=markdown_to_html(text), chat_id=chat_id, message_id=query.message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
             else:
-                bot.edit_message_text(text=text, inline_message_id=query.inline_message_id, reply_markup=reply_markup, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview="true")
+                bot.edit_message_text(text=markdown_to_html(text), inline_message_id=query.inline_message_id, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
     bot.answer_callback_query(callback_query_id=query.id, text=answer_text)
 
 
