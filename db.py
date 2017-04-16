@@ -93,7 +93,9 @@ class DBHandler:
                 else:
                     result["welcome_goodbye_name"] = "%s" % message.left_chat_member.first_name
         if message.new_chat_member:
-            cursor.execute("INSERT INTO users_chats(user_id,chat_id) VALUES(?,?)", (message.new_chat_member.id, message.chat.id))
+            user_chat_new_info = cursor.execute("SELECT * FROM users_chats WHERE chat_id=? AND user_id=?", (message.chat.id, message.new_chat_member.id)).fetchone()
+            if not user_chat_new_info:
+                cursor.execute("INSERT INTO users_chats(user_id,chat_id,options) VALUES(?,?,?)", (message.new_chat_member.id, message.chat.id,int(NotifyOptions.all_flags - NotifyOptions.silent)))
             user_info_new = cursor.execute("SELECT * FROM users WHERE id=?", (message.new_chat_member.id,)).fetchone()
             if not user_info_new:
                 query_user_new = (message.new_chat_member.id,
