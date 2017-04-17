@@ -282,7 +282,7 @@ class DBHandler:
                     hashtags = re.finditer(regex_hashtag, text, re.MULTILINE)
                     for i_hashtag in hashtags:
                         hashtag = i_hashtag.group()
-                        users_db = cursor.execute("SELECT * FROM users_hashtags WHERE hashtag=? AND (chat_id=0 OR chat_id=?)", (hashtag[1:], chat_id)).fetchall()
+                        users_db = cursor.execute("SELECT * FROM users_hashtags WHERE LOWER(hashtag)=LOWER(?) AND (chat_id=0 OR chat_id=?)", (hashtag[1:], chat_id)).fetchall()
                         for user_db in users_db:
                             user_id = user_db["user_id"]
                             hashtag_db = user_db["hashtag"]
