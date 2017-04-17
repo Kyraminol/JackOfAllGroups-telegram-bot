@@ -76,6 +76,21 @@ def markdown_to_html(text):
     return(restore_newlines)
 
 
+def send_media(bot, chat_id, media_type, media_id, text, reply_to_id=None):
+    if media_type == "audio":
+        bot.send_audio(chat_id=chat_id, audio=media_id, reply_to_message_id=reply_to_id)
+    elif media_type == "document":
+        bot.send_document(chat_id=chat_id, document=media_id, caption=text, reply_to_message_id=reply_to_id)
+    elif media_type == "photo":
+        bot.send_photo(chat_id=chat_id, photo=media_id, caption=text, reply_to_message_id=reply_to_id)
+    elif media_type == "sticker":
+        bot.send_sticker(chat_id=chat_id, sticker=media_id, reply_to_message_id=reply_to_id)
+    elif media_type == "video":
+        bot.send_video(chat_id=chat_id, video=media_id, caption=text, reply_to_message_id=reply_to_id)
+    elif media_type == "voice":
+        bot.send_voice(chat_id=chat_id, voice=media_id, reply_to_message_id=reply_to_id)
+
+
 def cmd_start(bot, update):
     msg_parse(bot, update)
     chat = update.message.chat
@@ -180,21 +195,25 @@ def msg_parse(bot, update):
                         shortcut_name = message.text[1:]
                     else:
                         shortcut_name = message.text
-                    shortcut = db.shortcut(chat_id, shortcut_name=shortcut_name)
+                    shortcut = db.shortcut(chat_id, name=shortcut_name)
                     if shortcut["shortcut"]:
-                        shortcut_content = shortcut["shortcut"]["shortcut_content"]
+                        shortcut = shortcut["shortcut"]
                         if message.reply_to_message:
                             reply_to_id = message.reply_to_message.message_id
                         else:
                             reply_to_id = message.message_id
-                        if edited:
-                            msg_original_bot = db.get_msg(chat_id, reply_to=reply_to_id, from_id=bot.id)
-                            if msg_original_bot["msg"]:
-                                db.log(bot.edit_message_text(markdown_to_html(shortcut_content), chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML, disable_web_page_preview=True))
-                            else:
-                                db.log(bot.send_message(chat_id, markdown_to_html(shortcut_content), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                        text = shortcut["text"]
+                        if shortcut["media_id"]:
+                            send_media(bot, chat_id, shortcut["media_type"], shortcut["media_id"], text, reply_to_id)
                         else:
-                            db.log(bot.send_message(chat_id, markdown_to_html(shortcut_content), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                            if edited:
+                                msg_original_bot = db.get_msg(chat_id, reply_to=reply_to_id, from_id=bot.id)
+                                if msg_original_bot["msg"]:
+                                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_original_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML, disable_web_page_preview=True))
+                                else:
+                                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
+                            else:
+                                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=reply_to_id, disable_web_page_preview=True))
         else:
             text = ""
             keyboard = []
@@ -504,32 +523,44 @@ def cmd_shortcut_set(bot, update):
         chat_type = message.chat.type
         cmd_regex = r"^/\w+"
         cmd_text = re.search(cmd_regex, message.text)
+        error_msg = "È necessario indicare dopo il comando il nome della scorciatoia e il testo della scorciatoia, oppure rispondere ad un messaggio con solo il nome della scorciatoia.\n\n_Esempio: /shortcut !GuidaScorciatoia Questo è il testo che verrà mostrato quando si invocherà !GuidaScorciatoia_"
         if cmd_text:
-            text = message.text[cmd_text.end():].strip().split(" ", 1)
-            if len(text) >= 2:
+            text = message.text[cmd_text.end():].strip().split(maxsplit=1)
+            if (len(text) >= 2) or (len(text) >= 1 and message.reply_to_message):
                 is_admin = False
                 if not chat_type == "private":
                     admins = db.update_admins(bot.get_chat_administrators(chat_id), chat_id)
                     if message.from_user.id in admins["admins_id"]:
                         is_admin = True
                     if is_admin:
+                        shortcut = None
                         if text[0][:1] == "!":
                             shortcut_name = text[0][1:]
                         else:
                             shortcut_name = text[0]
-                        shortcut = db.shortcut(chat_id, shortcut_name=shortcut_name, shortcut_content=text[1])
-                        if shortcut["action"] == "added":
-                            text = "Scorciatoia impostata."
-                        elif shortcut["action"] == "modified":
-                            text = "Scorciatoia modificata."
+                        if message.reply_to_message:
+                            media_info = db._get_media(message.reply_to_message)
+                            if media_info["media_id"]:
+                                shortcut = db.shortcut(chat_id, name=shortcut_name, content=media_info)
+                            else:
+                                shortcut = db.shortcut(chat_id, name=shortcut_name, content=media_info["text"])
+                        elif len(text) >= 2:
+                            shortcut = db.shortcut(chat_id, name=shortcut_name, content=text[1])
                         else:
-                            text = "Comportamento anomalo, contattare il mio sviluppatore!"
+                            text = error_msg
+                        if shortcut:
+                            if shortcut["action"] == "added":
+                                text = "Scorciatoia impostata."
+                            elif shortcut["action"] == "modified":
+                                text = "Scorciatoia modificata."
+                            else:
+                                text = "Comportamento anomalo, contattare il mio sviluppatore!"
                     else:
                         text = "Solo gli amministratori possono usare questa funzione."
                 else:
                     text = "Non puoi usare questa funzione in una conversazione privata."
             else:
-                text = "È necessario indicare dopo il comando il nome della scorciatoia e il testo della scorciatoia.\n\n_Esempio: /shortcut !GuidaScorciatoia Questo è il testo che verrà mostrato quando si invocherà !GuidaScorciatoia_"
+                text = error_msg
             if edited:
                 msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
                 if msg_bot:
@@ -765,18 +796,7 @@ def inline_button_callback(bot, update):
     if text or media_type:
         if new_msg:
             if media_type:
-                if media_type == "audio":
-                    bot.send_audio(chat_id=chat_id, audio=media_id)
-                elif media_type == "document":
-                    bot.send_document(chat_id=chat_id, document=media_id, caption=text)
-                elif media_type == "photo":
-                    bot.send_photo(chat_id=chat_id, photo=media_id, caption=text)
-                elif media_type == "sticker":
-                    bot.send_sticker(chat_id=chat_id, sticker=media_id)
-                elif media_type == "video":
-                    bot.send_video(chat_id=chat_id, video=media_id, caption=text)
-                elif media_type == "voice":
-                    bot.send_voice(chat_id=chat_id, voice=media_id)
+                send_media(bot, chat_id, media_type, media_id, text, query.message.message_id)
             else:
                 bot.send_message(text=markdown_to_html(text), chat_id=chat_id, message_id=query.message.message_id, reply_markup=reply_markup, parse_mode=ParseMode.HTML, disable_web_page_preview="true")
         else:
