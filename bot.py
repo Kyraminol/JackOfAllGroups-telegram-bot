@@ -642,9 +642,11 @@ def cmd_shortcut_getall(bot, update):
             if not chat_type == "private":
                 shortcuts_db = db.shortcut(chat_id)
                 if shortcuts_db["action"] == "get_all" and isinstance(shortcuts_db["shortcut"], tuple):
-                    if shortcuts["shortcut"]:
+                    if shortcuts_db["shortcut"]:
+                        shortcuts = ()
                         for shortcut in shortcuts_db["shortcut"]:
-                            shortcuts = (shortcut["name"],)
+                            print(shortcut["name"])
+                            shortcuts += (shortcut["name"],)
                         text = "Scorciatoie impostate per questa chat:\n\n*!%s*" % (", !".join(shortcuts))
                     else:
                         text = "Non ci sono scorciatoie impostate per questa chat."

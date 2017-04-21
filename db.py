@@ -701,7 +701,7 @@ class DBHandler:
             result["shortcut"] = ()
             shortcuts = cursor.execute("SELECT * FROM shortcuts WHERE chat_id=? ORDER BY name ASC", query_data).fetchall()
             for shortcut in shortcuts:
-                result["shortcut"] = ({"chat_id"    : shortcut["chat_id"],
+                result["shortcut"] += ({"chat_id"    : shortcut["chat_id"],
                                        "name"       : shortcut["name"],
                                        "text"       : shortcut["text"],
                                        "media_id"   : shortcut["media_id"],
