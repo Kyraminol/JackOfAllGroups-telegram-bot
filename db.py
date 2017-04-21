@@ -657,42 +657,56 @@ class DBHandler:
         result["exec_time"] = time.time() - start_time
         return(result)
 
-    def shortcut(self, chat_id, name, content=None, remove=False):
+    def shortcut(self, chat_id, name=None, content=None, remove=False):
         start_time = time.time()
         result = {"task_name"    : "shortcut"}
         handle = sqlite3.connect(self._dbpath)
         handle.row_factory = sqlite3.Row
         cursor = handle.cursor()
         action = ""
-        query_data = (chat_id, name)
-        shortcut = cursor.execute("SELECT * FROM shortcuts WHERE chat_id=? AND name=?", query_data).fetchone()
-        if remove == True:
-            if shortcut:
-                cursor.execute("DELETE FROM shortcuts WHERE chat_id=? AND name=?", query_data)
-                action = "removed"
+        query_data = (chat_id,)
+        if name:
+            query_data += (name,)
+            shortcut = cursor.execute("SELECT * FROM shortcuts WHERE chat_id=? AND name=?", query_data).fetchone()
+            if remove:
+                if shortcut:
+                    cursor.execute("DELETE FROM shortcuts WHERE chat_id=? AND name=?", query_data)
+                    action = "removed"
+                else:
+                    action = "not_removed"
             else:
-                action = "not_removed"
-        elif content:
-            if isinstance(content, dict) and "media_type" in content:
-                query_data = (content["text"], content["media_id"], content["media_type"], content["doc_type"]) + query_data
-            else:
-                query_data = (content, None, None, None) + query_data
-            if shortcut:
-                cursor.execute("UPDATE shortcuts SET text=?,media_id=?,media_type=?,doc_type=? WHERE chat_id=? AND name=?", query_data)
-                action = "modified"
-            else:
-                cursor.execute("INSERT INTO shortcuts(text, media_id, media_type, doc_type, chat_id, name) VALUES (?,?,?,?,?,?)", query_data)
-                action = "added"
+                if content:
+                    if isinstance(content, dict) and "media_type" in content:
+                        query_data = (content["text"], content["media_id"], content["media_type"], content["doc_type"]) + query_data
+                    else:
+                        query_data = (content, None, None, None) + query_data
+                    if shortcut:
+                        cursor.execute("UPDATE shortcuts SET text=?,media_id=?,media_type=?,doc_type=? WHERE chat_id=? AND name=?", query_data)
+                        action = "modified"
+                    else:
+                        cursor.execute("INSERT INTO shortcuts(text, media_id, media_type, doc_type, chat_id, name) VALUES (?,?,?,?,?,?)", query_data)
+                        action = "added"
+                else:
+                    action = "get"
+                    result["shortcut"] = {}
+                    if shortcut:
+                        result["shortcut"] = {"chat_id"    : shortcut["chat_id"],
+                                              "name"       : shortcut["name"],
+                                              "text"       : shortcut["text"],
+                                              "media_id"   : shortcut["media_id"],
+                                              "media_type" : shortcut["media_type"],
+                                              "doc_type"   : shortcut["doc_type"]}
         else:
-            action = "get"
-            result["shortcut"] = {}
-            if shortcut:
-                result["shortcut"] = {"chat_id"    : shortcut["chat_id"],
-                                      "name"       : shortcut["name"],
-                                      "text"       : shortcut["text"],
-                                      "media_id"   : shortcut["media_id"],
-                                      "media_type" : shortcut["media_type"],
-                                      "doc_type"   : shortcut["doc_type"]}
+            action = "get_all"
+            result["shortcut"] = ()
+            shortcuts = cursor.execute("SELECT * FROM shortcuts WHERE chat_id=? ORDER BY name ASC", query_data).fetchall()
+            for shortcut in shortcuts:
+                result["shortcut"] = ({"chat_id"    : shortcut["chat_id"],
+                                       "name"       : shortcut["name"],
+                                       "text"       : shortcut["text"],
+                                       "media_id"   : shortcut["media_id"],
+                                       "media_type" : shortcut["media_type"],
+                                       "doc_type"   : shortcut["doc_type"]},)
         result["action"] = action
         handle.commit()
         result["exec_time"] = time.time() - start_time
