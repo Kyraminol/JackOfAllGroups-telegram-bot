@@ -599,7 +599,7 @@ def cmd_shortcut_del(bot, update):
                             shortcut_name = text[1:]
                         else:
                             shortcut_name = text
-                        shortcut = db.shortcut(chat_id, shortcut_name=shortcut_name, remove=True)
+                        shortcut = db.shortcut(chat_id, name=shortcut_name, remove=True)
                         if shortcut["action"] == "removed":
                             text = "Scorciatoia rimossa."
                         elif shortcut["action"] == "not_removed":
@@ -620,6 +620,45 @@ def cmd_shortcut_del(bot, update):
                     db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
             else:
                 db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
+
+
+def cmd_shortcut_getall(bot, update):
+    edited = False
+    if update.message:
+        message = update.message
+    elif update.edited_message:
+        edited = True
+        message = update.edited_message
+    else:
+        message = None
+    if message:
+        msg_parse(bot, update)
+        chat_id = message.chat.id
+        chat_type = message.chat.type
+        cmd_regex = r"^/\w+"
+        cmd_text = re.search(cmd_regex, message.text)
+        if cmd_text:
+            text = message.text[cmd_text.end():].strip()
+            if not chat_type == "private":
+                shortcuts_db = db.shortcut(chat_id)
+                if shortcuts_db["action"] == "get_all" and isinstance(shortcuts_db["shortcut"], tuple):
+                    if shortcuts["shortcut"]:
+                        for shortcut in shortcuts_db["shortcut"]:
+                            shortcuts = (shortcut["name"],)
+                        text = "Scorciatoie impostate per questa chat:\n\n*!%s*" % (", !".join(shortcuts))
+                    else:
+                        text = "Non ci sono scorciatoie impostate per questa chat."
+            else:
+                text = "Non puoi usare questa funzione in una conversazione privata."
+            if edited:
+                msg_bot = db.get_msg(chat_id, from_id=bot.id, reply_to=message.message_id)
+                if msg_bot:
+                    db.log(bot.edit_message_text(markdown_to_html(text), chat_id, msg_bot["msg"][0]["msg_id"], parse_mode=ParseMode.HTML))
+                else:
+                    db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
+            else:
+                db.log(bot.send_message(chat_id, markdown_to_html(text), parse_mode=ParseMode.HTML, reply_to_message_id=message.message_id))
+
 
 
 def cmd_settings(bot, update):
@@ -827,6 +866,7 @@ def main():
     dp.add_handler(CommandHandler("settings", cmd_settings))
     dp.add_handler(CommandHandler("shortcut", cmd_shortcut_set, allow_edited=True))
     dp.add_handler(CommandHandler("del_shortcut", cmd_shortcut_del, allow_edited=True))
+    dp.add_handler(CommandHandler("shortcuts", cmd_shortcut_getall, allow_edited=True))
     dp.add_handler(MessageHandler(Filters.audio |
                                   Filters.command |
                                   Filters.contact |
